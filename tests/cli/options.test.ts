@@ -274,9 +274,16 @@ describe("resolveApiModel", () => {
     expect(resolveApiModel("gpt-6")).toBe("gpt-6-astra");
     expect(resolveApiModel("gpt-6-astra")).toBe("gpt-6-astra");
     expect(resolveApiModel("latest")).toBe("gpt-6-astra");
-    expect(resolveApiModel("GPT-6 Pro")).toBe("gpt-6-astra");
-    // Browser-only tier alias: the API side runs gpt-6-astra.
-    expect(resolveApiModel("gpt-6-pro")).toBe("gpt-6-astra");
+    expect(resolveApiModel("GPT-6 Astra")).toBe("gpt-6-astra");
+  });
+
+  test("rejects fake GPT-6 Pro model slugs with API-mode guidance", () => {
+    expect(() => resolveApiModel("gpt-6-pro")).toThrow(
+      "Use --model gpt-6-astra --reasoning-mode pro",
+    );
+    expect(() => resolveApiModel("GPT-6 Pro")).toThrow(
+      "Use --model gpt-6-astra --reasoning-mode pro",
+    );
   });
 
   test("preserves unknown gpt-6-* ids verbatim (OpenRouter/custom)", () => {
@@ -340,7 +347,6 @@ describe("inferModelFromLabel", () => {
     expect(inferModelFromLabel("Latest")).toBe("gpt-6-astra");
     expect(inferModelFromLabel("gpt-6-pro")).toBe("gpt-6-pro");
     expect(inferModelFromLabel("GPT-6 Pro")).toBe("gpt-6-pro");
-    expect(inferModelFromLabel("pro")).toBe("gpt-6-pro");
   });
 
   test("does not treat unknown gpt-6-* ids as the Latest alias", () => {
@@ -355,8 +361,8 @@ describe("inferModelFromLabel", () => {
     expect(inferModelFromLabel("5.5 FAST")).toBe("gpt-5.5-instant");
     expect(inferModelFromLabel("GPT-5.5 Pro")).toBe("gpt-5.5-pro");
     expect(inferModelFromLabel("Pro Extended")).toBe("gpt-5.5-pro");
-    // ChatGPT UI: bare "Pro" label maps to current Pro (gpt-6-pro)
-    expect(inferModelFromLabel("Pro")).toBe("gpt-6-pro");
+    // New ChatGPT UI (2026-05): bare "Pro" label maps to default (gpt-5.5-pro)
+    expect(inferModelFromLabel("Pro")).toBe("gpt-5.5-pro");
     expect(inferModelFromLabel("Thinking Heavy")).toBe("gpt-5.5");
   });
 
@@ -390,7 +396,7 @@ describe("inferModelFromLabel", () => {
   });
 
   test("falls back to pro when the label references pro", () => {
-    expect(inferModelFromLabel("ChatGPT Pro")).toBe("gpt-6-pro");
+    expect(inferModelFromLabel("ChatGPT Pro")).toBe("gpt-5.5-pro");
     expect(inferModelFromLabel("GPT-5.2 Pro")).toBe("gpt-5.2-pro");
     expect(inferModelFromLabel("GPT-5 Pro (Classic)")).toBe("gpt-5-pro");
   });

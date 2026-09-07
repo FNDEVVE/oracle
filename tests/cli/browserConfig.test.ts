@@ -96,10 +96,6 @@ describe("buildBrowserConfig", () => {
       desiredModel: "Latest",
       thinkingTime: "pro",
     });
-    await expect(buildBrowserConfig({ model: "pro" })).resolves.toMatchObject({
-      desiredModel: "Latest",
-      thinkingTime: "pro",
-    });
   });
 
   test("keeps version signal for gpt-5.5 Instant browser runs", async () => {
@@ -642,13 +638,12 @@ describe("GPT-6 aliases", () => {
       "latest",
       "GPT-6 Astra",
       "GPT-6 Pro",
-      "pro",
     ]) {
-      expect(isGpt6Alias(alias) || isGpt6ProAlias(alias), alias).toBe(true);
+      expect(isGpt6Alias(alias), alias).toBe(true);
     }
     expect(isGpt6ProAlias("gpt-6-pro")).toBe(true);
     expect(isGpt6ProAlias("GPT-6 Pro")).toBe(true);
-    expect(isGpt6ProAlias("pro")).toBe(true);
+    expect(isGpt6ProAlias("pro")).toBe(false);
     expect(isGpt6ProAlias("gpt-6")).toBe(false);
     expect(isGpt6ProAlias("gpt-6-astra")).toBe(false);
     expect(isGpt6ProAlias("latest")).toBe(false);
@@ -672,14 +667,12 @@ describe("GPT-6 aliases", () => {
     expect(normalizeChatGptModelForBrowser("gpt-6-astra")).toBe("gpt-6-astra");
     expect(normalizeChatGptModelForBrowser("latest" as never)).toBe("gpt-6-astra");
     expect(normalizeChatGptModelForBrowser("gpt-6-pro" as never)).toBe("gpt-6-pro");
-    expect(normalizeChatGptModelForBrowser("pro" as never)).toBe("gpt-6-pro");
     expect(mapModelToBrowserLabel("gpt-6-astra")).toBe("Latest");
     expect(mapModelToBrowserLabel("gpt-6-pro" as never)).toBe("Latest");
   });
 
-  test("defaults the Pro tier only for gpt-6-pro and pro", () => {
+  test("defaults the Pro tier only for gpt-6-pro", () => {
     expect(resolveDefaultBrowserThinkingTime({ model: "gpt-6-pro" })).toBe("pro");
-    expect(resolveDefaultBrowserThinkingTime({ model: "pro" })).toBe("pro");
     expect(
       resolveDefaultBrowserThinkingTime({ model: "gpt-6-astra", requestedModel: "gpt-6-pro" }),
     ).toBe("pro");

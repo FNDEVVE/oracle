@@ -144,6 +144,12 @@ function validateReasoningOptions(options: RunOracleOptions, route: ResolvedProv
       { model: options.model, reasoningEffort, reasoningMode },
     );
   }
+  if (options.model === "gpt-6-astra" && reasoningEffort === "none") {
+    throw new PromptValidationError(
+      `Reasoning effort "none" is not supported for GPT-6 Astra. Use low, medium, high, xhigh, or max.`,
+      { model: options.model, reasoningEffort },
+    );
+  }
   if (
     reasoningMode &&
     !route.isAzureOpenAI &&

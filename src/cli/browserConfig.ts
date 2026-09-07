@@ -151,10 +151,10 @@ export function normalizeChatGptModelForBrowser(model: ModelName): ModelName {
 }
 
 // Documented spellings only: gpt-6, gpt-6-astra, gpt-6-pro (plus their label forms such as
-// "GPT-6 Pro"), "latest", and "pro" map to ChatGPT's "Latest" model. Any other gpt-6-* id (gpt-6-codex,
+// "GPT-6 Pro") and "latest" map to ChatGPT's "Latest" model. Any other gpt-6-* id (gpt-6-codex,
 // gpt-6-custom, ...) is not an alias and must pass through unchanged for custom/OpenRouter use.
 const GPT6_ALIAS_PATTERN = /^gpt[-_ ]?6(?:[-_ ](?:astra|pro))?$/;
-const GPT6_PRO_ALIAS_PATTERN = /^(?:gpt[-_ ]?6[-_ ]pro|pro|chatgpt[-_ ]pro)$/;
+const GPT6_PRO_ALIAS_PATTERN = /^gpt[-_ ]?6[-_ ]pro$/;
 
 export function isGpt6Alias(model: string | undefined): boolean {
   const normalized = model?.trim().toLowerCase() ?? "";

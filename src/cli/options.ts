@@ -229,8 +229,11 @@ export function resolveApiModel(modelValue: string): ModelName {
   if (normalized.includes("/")) {
     return normalized as ModelName;
   }
-  // gpt-6-pro is a ChatGPT browser tier (Latest + Pro), not an API slug; the API side runs
-  // gpt-6-astra and the browser keeps the Pro default through the requested model.
+  if (isGpt6ProAlias(normalized)) {
+    throw new InvalidArgumentError(
+      "GPT-6 Pro is an API reasoning mode, not a model slug. Use --model gpt-6-astra --reasoning-mode pro (or --engine browser --model gpt-6-pro).",
+    );
+  }
   if (isGpt6Alias(normalized)) {
     return "gpt-6-astra";
   }
