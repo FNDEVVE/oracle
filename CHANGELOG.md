@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.19.0 - 2026-09-07
 
 **Highlights:** Durable detached MCP consultations, modern and legacy MCP client support, and clearer browser capture failures with preserved recovery evidence.
