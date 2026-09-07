@@ -40,7 +40,7 @@ describe("summarizeModelRunsForConsult", () => {
           waitForCompletion: false,
         },
         {
-          server: { sendLoggingMessage: vi.fn(async () => undefined) },
+          log: vi.fn(async () => undefined),
           launchDetached: launchDetached as never,
         },
       );
@@ -89,7 +89,7 @@ describe("summarizeModelRunsForConsult", () => {
           dryRun: true,
         },
         {
-          server: { sendLoggingMessage: vi.fn(async () => undefined) },
+          log: vi.fn(async () => undefined),
           launchDetached: launchDetached as never,
         },
       );
@@ -155,18 +155,15 @@ describe("summarizeModelRunsForConsult", () => {
   });
 
   test("keeps the registered MCP input schema JSON-schema compatible", () => {
-    let inputSchema: z.ZodRawShape | undefined;
+    let inputSchema: z.ZodType | undefined;
     registerConsultTool({
       registerTool: (_name: string, def: unknown) => {
-        inputSchema = (def as { inputSchema: z.ZodRawShape }).inputSchema;
-      },
-      server: {
-        sendLoggingMessage: async () => undefined,
+        inputSchema = (def as { inputSchema: z.ZodType }).inputSchema;
       },
     } as unknown as Parameters<typeof registerConsultTool>[0]);
 
     expect(inputSchema).toBeDefined();
-    expect(() => z.toJSONSchema(z.object(inputSchema!))).not.toThrow();
+    expect(() => z.toJSONSchema(inputSchema!)).not.toThrow();
   });
 
   test("maps per-model metadata into consult summaries", () => {
@@ -479,11 +476,12 @@ describe("summarizeModelRunsForConsult", () => {
     try {
       const handlers: Array<(input: unknown) => Promise<unknown>> = [];
       registerConsultTool({
-        registerTool: (_name: string, _def: unknown, fn: (input: unknown) => Promise<unknown>) => {
-          handlers.push(fn);
-        },
-        server: {
-          sendLoggingMessage: async () => undefined,
+        registerTool: (
+          _name: string,
+          _def: unknown,
+          fn: (input: unknown, context: unknown) => Promise<unknown>,
+        ) => {
+          handlers.push((input) => fn(input, { mcpReq: { log: async () => undefined } }));
         },
       } as unknown as Parameters<typeof registerConsultTool>[0]);
       const handler = handlers[0];
@@ -534,11 +532,12 @@ describe("summarizeModelRunsForConsult", () => {
     try {
       const handlers: Array<(input: unknown) => Promise<unknown>> = [];
       registerConsultTool({
-        registerTool: (_name: string, _def: unknown, fn: (input: unknown) => Promise<unknown>) => {
-          handlers.push(fn);
-        },
-        server: {
-          sendLoggingMessage: async () => undefined,
+        registerTool: (
+          _name: string,
+          _def: unknown,
+          fn: (input: unknown, context: unknown) => Promise<unknown>,
+        ) => {
+          handlers.push((input) => fn(input, { mcpReq: { log: async () => undefined } }));
         },
       } as unknown as Parameters<typeof registerConsultTool>[0]);
       const handler = handlers[0];
@@ -571,10 +570,13 @@ describe("summarizeModelRunsForConsult", () => {
     try {
       const handlers: Array<(input: unknown) => Promise<unknown>> = [];
       registerConsultTool({
-        registerTool: (_name: string, _def: unknown, fn: (input: unknown) => Promise<unknown>) => {
-          handlers.push(fn);
+        registerTool: (
+          _name: string,
+          _def: unknown,
+          fn: (input: unknown, context: unknown) => Promise<unknown>,
+        ) => {
+          handlers.push((input) => fn(input, { mcpReq: { log: async () => undefined } }));
         },
-        server: { sendLoggingMessage: async () => undefined },
       } as unknown as Parameters<typeof registerConsultTool>[0]);
       const handler = handlers[0];
       if (!handler) throw new Error("handler not registered");
@@ -610,10 +612,13 @@ describe("summarizeModelRunsForConsult", () => {
     try {
       const handlers: Array<(input: unknown) => Promise<unknown>> = [];
       registerConsultTool({
-        registerTool: (_name: string, _def: unknown, fn: (input: unknown) => Promise<unknown>) => {
-          handlers.push(fn);
+        registerTool: (
+          _name: string,
+          _def: unknown,
+          fn: (input: unknown, context: unknown) => Promise<unknown>,
+        ) => {
+          handlers.push((input) => fn(input, { mcpReq: { log: async () => undefined } }));
         },
-        server: { sendLoggingMessage: async () => undefined },
       } as unknown as Parameters<typeof registerConsultTool>[0]);
       const handler = handlers[0];
       if (!handler) throw new Error("handler not registered");
@@ -638,11 +643,12 @@ describe("summarizeModelRunsForConsult", () => {
   test("rejects unsupported consult fields instead of silently ignoring them", async () => {
     const handlers: Array<(input: unknown) => Promise<unknown>> = [];
     registerConsultTool({
-      registerTool: (_name: string, _def: unknown, fn: (input: unknown) => Promise<unknown>) => {
-        handlers.push(fn);
-      },
-      server: {
-        sendLoggingMessage: async () => undefined,
+      registerTool: (
+        _name: string,
+        _def: unknown,
+        fn: (input: unknown, context: unknown) => Promise<unknown>,
+      ) => {
+        handlers.push((input) => fn(input, { mcpReq: { log: async () => undefined } }));
       },
     } as unknown as Parameters<typeof registerConsultTool>[0]);
     const handler = handlers[0];
