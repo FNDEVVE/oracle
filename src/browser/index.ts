@@ -60,7 +60,10 @@ import {
 } from "./actions/deepResearch.js";
 import { estimateTokenCount, withRetries, delay } from "./utils.js";
 import { formatElapsed } from "../oracle/format.js";
-import type { BrowserModelSelectionEvidence } from "../sessionStore.js";
+import type {
+  BrowserModelSelectionEvidence,
+  BrowserThinkingSelectionEvidence,
+} from "../sessionStore.js";
 import { CHATGPT_URL, DEFAULT_MODEL_STRATEGY } from "./constants.js";
 import type { LaunchedChrome } from "chrome-launcher";
 import { BrowserAutomationError } from "../oracle/errors.js";
@@ -1116,6 +1119,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
   let lastUrl: string | undefined;
   let promptSubmitted = false;
   let modelSelectionEvidence: BrowserModelSelectionEvidence | undefined;
+  let thinkingSelectionEvidence: BrowserThinkingSelectionEvidence | undefined;
   let tabLease: BrowserTabLease | null = null;
   let conversationUrlMonitor: ConversationUrlMonitor | null = null;
   const emitRuntimeHint = async (): Promise<void> => {
@@ -1675,7 +1679,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
     const deepResearch = config.researchMode === "deep";
     if (shouldApplyThinkingTimeSelection(config)) {
       const thinkingTargetModel = modelStrategy === "select" ? config.desiredModel : null;
-      await raceWithDisconnect(
+      thinkingSelectionEvidence = await raceWithDisconnect(
         withRetries(
           () => ensureThinkingTime(Runtime, config.thinkingTime, logger, thinkingTargetModel),
           {
@@ -1930,6 +1934,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         artifacts: savedArtifacts,
         archive,
         modelSelection: modelSelectionEvidence,
+        thinkingSelection: thinkingSelectionEvidence,
         tookMs: durationMs,
         answerTokens: tokens,
         answerChars: researchResult.text.length,
@@ -2449,6 +2454,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
       savedFiles: fileArtifacts.savedFiles,
       archive,
       modelSelection: modelSelectionEvidence,
+      thinkingSelection: thinkingSelectionEvidence,
       tookMs: durationMs,
       answerTokens,
       answerChars,
@@ -3068,6 +3074,7 @@ async function runRemoteBrowserMode(
   let lastUrl: string | undefined;
   let promptSubmitted = false;
   let modelSelectionEvidence: BrowserModelSelectionEvidence | undefined;
+  let thinkingSelectionEvidence: BrowserThinkingSelectionEvidence | undefined;
   let attachedExistingTab = false;
   let ownsTarget = true;
   let conversationUrlMonitor: ConversationUrlMonitor | null = null;
@@ -3289,7 +3296,7 @@ async function runRemoteBrowserMode(
     const deepResearch = config.researchMode === "deep";
     if (shouldApplyThinkingTimeSelection(config)) {
       const thinkingTargetModel = modelStrategy === "select" ? config.desiredModel : null;
-      await withRetries(
+      thinkingSelectionEvidence = await withRetries(
         () => ensureThinkingTime(Runtime, config.thinkingTime, logger, thinkingTargetModel),
         {
           retries: 2,
@@ -3479,6 +3486,7 @@ async function runRemoteBrowserMode(
         artifacts: savedArtifacts,
         archive,
         modelSelection: modelSelectionEvidence,
+        thinkingSelection: thinkingSelectionEvidence,
         tookMs: durationMs,
         answerTokens: tokens,
         answerChars: researchResult.text.length,
@@ -3961,6 +3969,7 @@ async function runRemoteBrowserMode(
       savedFiles: fileArtifacts.savedFiles,
       archive,
       modelSelection: modelSelectionEvidence,
+      thinkingSelection: thinkingSelectionEvidence,
       controllerPid: process.pid,
     };
   } catch (error) {

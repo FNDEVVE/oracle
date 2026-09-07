@@ -95,6 +95,10 @@ Run this when touching top-level CLI startup, option parsing, signal handling, o
    `pnpm run oracle -- --perf-trace --perf-trace-path /tmp/oracle-perf.json --dry-run summary --prompt "trace smoke"`
    - Confirm the JSON contains `cli-module-ready`, `root-command-start`, `first-output`, and `exit`, and prompt/key-like argv values are redacted.
 
+### Thinking effort evidence
+
+`node scripts/effort-readiness-proof.mjs` also checks persisted and displayed effort evidence for switched, already-selected, unverified best-effort, and refused strict selections. Its bridge case runs both built CLI processes against isolated Chrome and verifies structured effort evidence survives without host PID/profile fields. The page is synthetic; fresh signed-in selection and backend effort remain separate checks.
+
 ### Lightweight Browser CLI (manual exploration)
 
 Before running any agent-driven debugging, you can rely on the TypeScript CLI in `scripts/browser-tools.ts`:
