@@ -338,6 +338,20 @@ describe("summarizeModelRunsForConsult", () => {
     });
   });
 
+  test("supports gpt-6-pro through MCP browser consult config", () => {
+    const config = buildConsultBrowserConfig({
+      userConfig: {},
+      env: {},
+      runModel: "gpt-6-pro",
+      inputModel: "gpt-6-pro",
+    });
+
+    expect(config).toMatchObject({
+      desiredModel: "Latest",
+      thinkingTime: "pro",
+    });
+  });
+
   test("lets configured effort override the current Pro alias default", () => {
     const config = buildConsultBrowserConfig({
       userConfig: { browser: { thinkingTime: "extended" } },

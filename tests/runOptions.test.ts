@@ -452,6 +452,26 @@ describe("resolveRunOptionsFromConfig", () => {
     expect(runOptions.model).toBe("gpt-5.6-sol");
   });
 
+  it("maps browser engine gpt-6-pro to gpt-6-pro", () => {
+    const { resolvedEngine, runOptions } = resolveRunOptionsFromConfig({
+      prompt: basePrompt,
+      model: "gpt-6-pro",
+      engine: "browser",
+    });
+    expect(resolvedEngine).toBe("browser");
+    expect(runOptions.model).toBe("gpt-6-pro");
+  });
+
+  it("rejects gpt-6-pro for API engine runs", () => {
+    expect(() =>
+      resolveRunOptionsFromConfig({
+        prompt: basePrompt,
+        model: "gpt-6-pro",
+        engine: "api",
+      }),
+    ).toThrow("Use --model gpt-6-astra --reasoning-mode pro");
+  });
+
   it("keeps gpt-5.4-pro unchanged for API engine runs", () => {
     const { resolvedEngine, runOptions } = resolveRunOptionsFromConfig({
       prompt: basePrompt,
