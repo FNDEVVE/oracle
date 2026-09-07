@@ -270,6 +270,23 @@ describe("resolveApiModel", () => {
     );
   });
 
+  test("maps the documented GPT-6 aliases to the gpt-6-astra API model", () => {
+    expect(resolveApiModel("gpt-6")).toBe("gpt-6-astra");
+    expect(resolveApiModel("gpt-6-astra")).toBe("gpt-6-astra");
+    expect(resolveApiModel("latest")).toBe("gpt-6-astra");
+    expect(resolveApiModel("GPT-6 Pro")).toBe("gpt-6-astra");
+    // Browser-only tier alias: the API side runs gpt-6-astra.
+    expect(resolveApiModel("gpt-6-pro")).toBe("gpt-6-astra");
+  });
+
+  test("preserves unknown gpt-6-* ids verbatim (OpenRouter/custom)", () => {
+    expect(resolveApiModel("gpt-6-custom")).toBe("gpt-6-custom");
+    expect(resolveApiModel("gpt-6-astra-mini")).toBe("gpt-6-astra-mini");
+    expect(resolveApiModel("gpt-6.1")).toBe("gpt-6.1");
+    expect(resolveApiModel("openai/gpt-6-astra")).toBe("openai/gpt-6-astra");
+    expect(resolveApiModel("gpt-6-codex")).toBe("gpt-5.1-codex");
+  });
+
   test("passes through unknown names (OpenRouter/custom)", () => {
     expect(resolveApiModel("instant")).toBe("instant");
     expect(resolveApiModel("openai/gpt-5.4")).toBe("openai/gpt-5.4");
@@ -315,14 +332,31 @@ describe("inferModelFromLabel", () => {
     expect(inferModelFromLabel("anthropic/claude-sonnet-4.5")).toBe("anthropic/claude-sonnet-4.5");
   });
 
+  test("infers the documented GPT-6 aliases and keeps the browser-only Pro alias", () => {
+    expect(inferModelFromLabel("gpt-6")).toBe("gpt-6-astra");
+    expect(inferModelFromLabel("gpt-6-astra")).toBe("gpt-6-astra");
+    expect(inferModelFromLabel("GPT-6 Astra")).toBe("gpt-6-astra");
+    expect(inferModelFromLabel("latest")).toBe("gpt-6-astra");
+    expect(inferModelFromLabel("Latest")).toBe("gpt-6-astra");
+    expect(inferModelFromLabel("gpt-6-pro")).toBe("gpt-6-pro");
+    expect(inferModelFromLabel("GPT-6 Pro")).toBe("gpt-6-pro");
+    expect(inferModelFromLabel("pro")).toBe("gpt-6-pro");
+  });
+
+  test("does not treat unknown gpt-6-* ids as the Latest alias", () => {
+    expect(inferModelFromLabel("gpt-6-codex")).toBe("gpt-5.1-codex");
+    expect(inferModelFromLabel("gpt-6-custom")).not.toMatch(/^gpt-6/);
+    expect(inferModelFromLabel("gpt-6-astra-mini")).not.toMatch(/^gpt-6/);
+  });
+
   test("infers 5.5 variants", () => {
     expect(inferModelFromLabel("ChatGPT 5.5")).toBe("gpt-5.5");
     expect(inferModelFromLabel("ChatGPT 5.5 Instant")).toBe("gpt-5.5-instant");
     expect(inferModelFromLabel("5.5 FAST")).toBe("gpt-5.5-instant");
     expect(inferModelFromLabel("GPT-5.5 Pro")).toBe("gpt-5.5-pro");
     expect(inferModelFromLabel("Pro Extended")).toBe("gpt-5.5-pro");
-    // New ChatGPT UI (2026-05): bare "Pro" label maps to default (gpt-5.5-pro)
-    expect(inferModelFromLabel("Pro")).toBe("gpt-5.5-pro");
+    // ChatGPT UI: bare "Pro" label maps to current Pro (gpt-6-pro)
+    expect(inferModelFromLabel("Pro")).toBe("gpt-6-pro");
     expect(inferModelFromLabel("Thinking Heavy")).toBe("gpt-5.5");
   });
 
@@ -356,7 +390,7 @@ describe("inferModelFromLabel", () => {
   });
 
   test("falls back to pro when the label references pro", () => {
-    expect(inferModelFromLabel("ChatGPT Pro")).toBe("gpt-5.5-pro");
+    expect(inferModelFromLabel("ChatGPT Pro")).toBe("gpt-6-pro");
     expect(inferModelFromLabel("GPT-5.2 Pro")).toBe("gpt-5.2-pro");
     expect(inferModelFromLabel("GPT-5 Pro (Classic)")).toBe("gpt-5-pro");
   });
