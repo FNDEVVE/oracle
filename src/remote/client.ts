@@ -26,6 +26,7 @@ import {
 import { materializeStagedFallbackBundle } from "../browser/prompt.js";
 import { checkRemoteHealth } from "./health.js";
 import { parseHostPort } from "../bridge/connection.js";
+import { BrowserRunCancelledError } from "../oracle/errors.js";
 
 interface RemoteExecutorOptions {
   host: string;
@@ -37,6 +38,17 @@ export function createRemoteBrowserExecutor({ host, token }: RemoteExecutorOptio
   return async function remoteBrowserExecutor(
     options: BrowserRunOptions,
   ): Promise<BrowserRunResult> {
+    const callerSignal = options.signal;
+    if (callerSignal?.aborted)
+      throw new BrowserRunCancelledError("Browser run cancelled before the request was sent.");
+    if (callerSignal) {
+      const health = await checkRemoteHealth({ host, token, signal: callerSignal });
+      if (callerSignal.aborted) throw new BrowserRunCancelledError();
+      if (health.capabilities?.runCancellation !== true)
+        throw new Error(
+          "Remote host does not support run cancellation; upgrade the host before using an AbortSignal.",
+        );
+    }
     const payload: RemoteRunPayload = {
       prompt: options.prompt,
       attachments: await serializeAttachments(options.attachments ?? []),
@@ -47,6 +59,7 @@ export function createRemoteBrowserExecutor({ host, token }: RemoteExecutorOptio
         verbose: options.verbose,
         sessionId: options.sessionId,
         followUpPrompts: options.followUpPrompts,
+        cancelOnDisconnect: callerSignal ? true : undefined,
       },
     };
 
@@ -54,6 +67,10 @@ export function createRemoteBrowserExecutor({ host, token }: RemoteExecutorOptio
     const { hostname, port } = parseHost(host);
 
     return new Promise<BrowserRunResult>((resolve, reject) => {
+      if (callerSignal?.aborted) {
+        reject(new Error("Browser run cancelled before the request was sent."));
+        return;
+      }
       const transferredFiles: SavedBrowserFile[] = [];
       const transferFailures: string[] = [];
       const transferPromises: Promise<void>[] = [];
@@ -64,6 +81,7 @@ export function createRemoteBrowserExecutor({ host, token }: RemoteExecutorOptio
       const fail = (error: Error) => {
         if (settled) return;
         settled = true;
+        callerSignal?.removeEventListener("abort", onCallerAbort);
         reject(error);
       };
 
@@ -133,6 +151,7 @@ export function createRemoteBrowserExecutor({ host, token }: RemoteExecutorOptio
                 return;
               }
               settled = true;
+              callerSignal?.removeEventListener("abort", onCallerAbort);
               resolve(mergeTransferredArtifacts(resolved, transferredFiles, transferFailures));
             })().catch(fail);
           });
@@ -140,6 +159,16 @@ export function createRemoteBrowserExecutor({ host, token }: RemoteExecutorOptio
         },
       );
       req.on("error", fail);
+
+      // Destroying the request closes the socket, which is how the service learns
+      // to abort: its own disconnect handler fires and releases the slot and the
+      // browser tab.
+      const onCallerAbort = () => {
+        req.destroy();
+        fail(new BrowserRunCancelledError("Browser run cancelled: the caller aborted."));
+      };
+      callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
+
       req.write(body);
       req.end();
     });
@@ -259,12 +288,17 @@ function handleEvent(params: {
         token: params.token,
         descriptor: event.artifact,
         sessionId: params.options.sessionId,
+        signal: params.options.signal,
         log: params.options.log,
       })
         .then((artifact) => {
           params.onArtifact(artifact);
         })
         .catch((error) => {
+          if (params.options.signal?.aborted) {
+            params.onError(new BrowserRunCancelledError());
+            return;
+          }
           const message = error instanceof Error ? error.message : String(error);
           const fallback = `Oracle captured the browser text response, but bridge artifact transfer failed for ${displayFilename}. Open the ChatGPT browser on the bridge host, download the ZIP/file shown in the current response, and copy it to a cloud-readable path. Reason: ${message}`;
           params.options.log?.(`[browser] ${fallback}`);
@@ -286,7 +320,9 @@ async function transferRemoteArtifact(params: {
   descriptor: RemoteArtifactDescriptor;
   sessionId?: string;
   log?: BrowserRunOptions["log"];
+  signal?: AbortSignal;
 }): Promise<SavedBrowserFile> {
+  params.signal?.throwIfAborted();
   validateRemoteArtifactDescriptor(params.descriptor);
   const sessionId = params.sessionId ?? params.descriptor.runId;
   const artifactsDir = resolveSessionArtifactsDir(sessionId);
@@ -309,6 +345,7 @@ async function transferRemoteArtifact(params: {
     token: params.token,
     targetPath: partPath,
     descriptor: params.descriptor,
+    signal: params.signal,
   }).catch(async (error) => {
     await rm(partPath, { force: true }).catch(() => undefined);
     throw error;
@@ -334,6 +371,10 @@ async function transferRemoteArtifact(params: {
     throw new Error(`${validation.type} validation failed: ${validation.error ?? "invalid"}`);
   }
 
+  if (params.signal?.aborted) {
+    await rm(partPath, { force: true });
+    throw new BrowserRunCancelledError();
+  }
   await rename(partPath, finalPath);
   params.log?.(`[browser] Transferred artifact to ${finalPath}`);
   const publishedFilename = path.basename(finalPath);
@@ -361,6 +402,7 @@ async function downloadArtifactToFile(params: {
   token?: string;
   targetPath: string;
   descriptor: RemoteArtifactDescriptor;
+  signal?: AbortSignal;
 }): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const req = http.request(
@@ -369,6 +411,7 @@ async function downloadArtifactToFile(params: {
         port: params.port,
         path: params.path,
         method: "GET",
+        signal: params.signal,
         headers: params.token ? { authorization: `Bearer ${params.token}` } : undefined,
       },
       (res) => {

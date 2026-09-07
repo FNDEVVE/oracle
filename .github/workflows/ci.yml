@@ -70,6 +70,8 @@ jobs:
         run: node scripts/artifact-export-proof.mjs
       - name: Run shared Chrome lifecycle proof
         run: node scripts/shared-chrome-lifecycle-proof.mjs
+      - name: Run service admission and cancellation proof
+        run: node scripts/serve-queue-proof.mjs
       - name: Run attachment send proof
         run: node scripts/attachment-send-proof.mjs
       - name: Run built CLI attachment context proof

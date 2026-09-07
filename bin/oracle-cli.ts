@@ -966,6 +966,14 @@ program
   .option("--port <number>", "Port to listen on (default random).", parseIntOption)
   .option("--token <value>", "Access token clients must provide (random if omitted).")
   .option(
+    "--max-concurrent-runs <count>",
+    "Opt into concurrent runs and FIFO queueing; clamped to the host browser tab cap (default remains single-flight HTTP 409).",
+  )
+  .option(
+    "--max-queued-runs <count>",
+    "Waiting requests in opt-in queue mode (default 8; 0 disables waiting).",
+  )
+  .option(
     "--manual-login",
     "Use a dedicated Chrome profile for manual login (recommended when cookie sync is unavailable).",
     false,
@@ -985,6 +993,14 @@ program
       host: commandOptions.host,
       port: commandOptions.port,
       token: commandOptions.token,
+      maxConcurrentRuns:
+        commandOptions.maxConcurrentRuns === undefined
+          ? undefined
+          : Number(commandOptions.maxConcurrentRuns),
+      maxQueuedRuns:
+        commandOptions.maxQueuedRuns === undefined
+          ? undefined
+          : Number(commandOptions.maxQueuedRuns),
       manualLoginDefault: commandOptions.manualLogin,
       manualLoginProfileDir: commandOptions.manualLoginProfileDir,
       cookieSyncDefault: commandOptions.browserCookieSync,

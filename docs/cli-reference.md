@@ -108,11 +108,13 @@ See [Browser Mode](browser-mode.md) for usage.
 
 ## Remote browser
 
-| Flag                          | Purpose                                      |
-| ----------------------------- | -------------------------------------------- |
-| `--remote-host <host:port>`   | Use a remote `oracle serve` host.            |
-| `--remote-token <secret>`     | Auth for the remote host.                    |
-| `--remote-chrome <host:port>` | Attach to an existing remote Chrome session. |
+| Flag                                  | Purpose                                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `--remote-host <host:port>`           | Use a remote `oracle serve` host.                                                                 |
+| `--remote-token <secret>`             | Auth for the remote host.                                                                         |
+| `--remote-chrome <host:port>`         | Attach to an existing remote Chrome session.                                                      |
+| `serve --max-concurrent-runs <count>` | Opt into bounded concurrent admission; effective capacity cannot exceed the host browser tab cap. |
+| `serve --max-queued-runs <count>`     | Waiting requests in opt-in mode (default 8; zero disables waiting).                               |
 
 ## Image / media (browser)
 

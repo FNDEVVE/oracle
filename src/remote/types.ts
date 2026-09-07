@@ -29,6 +29,7 @@ export interface RemoteRunPayload {
     verbose?: boolean;
     sessionId?: string;
     followUpPrompts?: string[];
+    cancelOnDisconnect?: boolean;
   };
 }
 
@@ -37,6 +38,7 @@ export interface RemoteArtifactCapabilities {
   artifactProtocolVersion: number;
   maxArtifactBytes: number;
   deferredFallbackBundling?: boolean;
+  runCancellation?: boolean;
 }
 
 export interface RemoteArtifactDescriptor {

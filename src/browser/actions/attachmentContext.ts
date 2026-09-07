@@ -1,3 +1,4 @@
+import { withoutBrowserCancellation } from "../cancellation.js";
 import { randomUUID } from "node:crypto";
 import type { ChromeClient } from "../types.js";
 import { BrowserAutomationError } from "../../oracle/errors.js";
@@ -203,8 +204,10 @@ export async function withGuardedFileInput(
   assign: () => Promise<void>,
 ): Promise<void> {
   const id = randomUUID();
-  const prepared = await runtime.evaluate({
-    expression: `(() => {
+  let result: { blocked?: unknown } | undefined;
+  try {
+    const prepared = await runtime.evaluate({
+      expression: `(() => {
     const input = document.querySelector(${JSON.stringify(selector)});
     if (!(input instanceof HTMLInputElement) || input.type !== 'file') return { installed: false };
     const guard = ${buildFileInputGuardExpression("input", startUrl)};
@@ -213,24 +216,23 @@ export async function withGuardedFileInput(
     guards[${JSON.stringify(id)}] = guard;
     return { installed: true };
   })()`,
-    returnByValue: true,
-  });
-  const preparation = prepared.result?.value as
-    | { installed?: boolean; blocked?: unknown }
-    | undefined;
-  if (preparation?.blocked) assertComposerNavigationSnapshot(startUrl, preparation.blocked);
-  if (!preparation?.installed)
-    throw new BrowserAutomationError("Attachment input changed before assignment.", {
-      stage: "upload-attachment",
-      code: "attachment-input-unavailable",
+      returnByValue: true,
     });
-  let result: { blocked?: unknown } | undefined;
-  try {
+    const preparation = prepared.result?.value as
+      | { installed?: boolean; blocked?: unknown }
+      | undefined;
+    if (preparation?.blocked) assertComposerNavigationSnapshot(startUrl, preparation.blocked);
+    if (!preparation?.installed)
+      throw new BrowserAutomationError("Attachment input changed before assignment.", {
+        stage: "upload-attachment",
+        code: "attachment-input-unavailable",
+      });
     await assign();
   } finally {
-    const observed = await runtime
-      .evaluate({
-        expression: `(() => {
+    const observed = await withoutBrowserCancellation(() =>
+      runtime
+        .evaluate({
+          expression: `(() => {
       const guards = window.__oracleAttachmentInputGuards;
       const guard = guards?.[${JSON.stringify(id)}];
       if (!guard) return null;
@@ -238,9 +240,10 @@ export async function withGuardedFileInput(
       const summary = { blocked: guard.blocked };
       guard.cleanup(); delete guards[${JSON.stringify(id)}]; return summary;
     })()`,
-        returnByValue: true,
-      })
-      .catch(() => undefined);
+          returnByValue: true,
+        })
+        .catch(() => undefined),
+    );
     result = observed?.result?.value as typeof result;
   }
   if (!result)

@@ -387,9 +387,17 @@ Prefer to keep Chrome entirely on the remote Mac (no DevTools tunneling, no manu
    - `oracle serve` logs the DevTools port of the manual-login Chrome (e.g., `Manual-login Chrome DevTools port: 54371`). Runs automatically attach to that logged-in Chrome; you can use the printed port/JSON URL for debugging if needed.
 
 4. **Stop the host**
-   - `Ctrl+C` on the VM shuts down the HTTP server and Chrome. Restart `oracle serve` whenever you need a new session; omit `--token` to let it rotate automatically.
+   - `Ctrl+C` on the VM shuts down the HTTP server. Shared manual-login Chrome can remain available for reuse. Restart `oracle serve` whenever you need a new session; omit `--token` to let it rotate automatically.
 
 This mode is ideal when you have a macOS VM (or spare Mac mini) logged into ChatGPT and you just want to run the CLI from another machine without ever copying profiles or keeping Chrome visible locally.
+
+#### Optional concurrent admission
+
+Plain `oracle serve` retains single-flight admission and HTTP 409 `busy`. To opt into FIFO queueing, use `oracle serve --max-concurrent-runs 2 --max-queued-runs 8`. The queue defaults to eight waiting requests; zero disables waiting. Active capacity is clamped to the host's browser tab limit, resolved from host configuration, then `ORACLE_BROWSER_MAX_CONCURRENT_TABS`, then the existing default of three. Client settings cannot raise that limit. `/health` reports the effective active/queued counts and limits. A full opt-in queue returns HTTP 503 `queue_full` with `Retry-After: 60`.
+
+In queue mode, a disconnected caller gives up its waiting position or cancels its active automation. Owned targets are closed unless the caller explicitly requested they remain open; borrowed tabs and the shared Chrome process are preserved. Cancellation stops further automation and cleans up resources that arrive late, but does not undo an already submitted prompt or attest that ChatGPT stopped backend generation. Host artifact sessions receive a sanitized per-run namespace, so clients with the same slug do not share files.
+
+Programmatic `BrowserRunOptions.signal` requests cancellation explicitly even on a host using legacy admission. The client checks the host's `runCancellation` capability before sending such a run; older hosts remain usable without an AbortSignal. Plain clients on a legacy host retain their existing disconnect behavior.
 
 ## Limitations / Follow-Up Plan
 

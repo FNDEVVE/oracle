@@ -162,6 +162,10 @@ Debug note: when you have a live ChatGPT tab open under a DevTools port and need
 - Remember: the browser composer now pastes only the user prompt (plus any inline file blocks). If you see the default “You are Oracle…” text or other system-prefixed content in the ChatGPT composer, something regressed in `assembleBrowserPrompt` and you should stop and file a bug.
 - Heartbeats: Browser runs emit `--heartbeat` status while waiting. Long Thinking/Pro runs should show `[browser] ChatGPT thinking ...` or `[browser] Waiting for ChatGPT response ...`; the log must not include reasoning text from the side panel.
 
+### Service admission and cancellation
+
+For service admission and cancellation, run `pnpm build && node scripts/serve-queue-proof.mjs`. It drives the built service and CLI clients against real isolated Chrome with synthetic pages: default 409, host-cap clamping, FIFO waiting, 503 overflow, queued/active cancellation, and distinct host sessions. Additional compiled integration runs cover lease/profile-lock waits, borrowed targets, delayed CDP replies, Chrome acquisition, and temporary-launch cleanup. `--baseline-cli <path>` uses an older client for one queued completion. This does not prove signed-in ChatGPT behavior or backend generation cancellation.
+
 ## Post-Run Validation
 
 - `oracle session <id>` should replay the transcript with markdown.

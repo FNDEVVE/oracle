@@ -1,3 +1,4 @@
+import { withoutBrowserCancellation } from "../cancellation.js";
 import type { ChromeClient, BrowserLogger } from "../types.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -799,8 +800,10 @@ async function activateExactAttachmentSendButton(
   }
   const guardId = randomUUID();
   // Recheck at event delivery too: a SPA can navigate after the CDP probe returns.
-  const boundary = await Runtime.evaluate({
-    expression: `(() => {
+  let delivery: { sawKeyDown?: boolean; blocked?: unknown } | undefined;
+  try {
+    const boundary = await Runtime.evaluate({
+      expression: `(() => {
         const button = document.querySelector('button[data-testid="send-button"]');
         const check = () => {
           const navigation = ${buildComposerNavigationValidationExpression(attachmentNavigationUrl)};
@@ -857,15 +860,13 @@ async function activateExactAttachmentSendButton(
         window.addEventListener('click', onClick, true);
         return snapshot;
       })()`,
-    returnByValue: true,
-  });
-  const snapshot = boundary?.result?.value as
-    | { focused?: boolean; attachmentsReady?: boolean }
-    | undefined;
-  assertComposerNavigationSnapshot(attachmentNavigationUrl, snapshot);
-  if (snapshot?.focused !== true || snapshot.attachmentsReady !== true) return false;
-  let delivery: { sawKeyDown?: boolean; blocked?: unknown } | undefined;
-  try {
+      returnByValue: true,
+    });
+    const snapshot = boundary?.result?.value as
+      | { focused?: boolean; attachmentsReady?: boolean }
+      | undefined;
+    assertComposerNavigationSnapshot(attachmentNavigationUrl, snapshot);
+    if (snapshot?.focused !== true || snapshot.attachmentsReady !== true) return false;
     await Input.dispatchKeyEvent({
       type: "keyDown",
       ...ENTER_KEY_EVENT,
@@ -874,15 +875,17 @@ async function activateExactAttachmentSendButton(
     });
     await Input.dispatchKeyEvent({ type: "keyUp", ...ENTER_KEY_EVENT });
   } finally {
-    const result = await Runtime.evaluate({
-      expression: `(() => {
+    const result = await withoutBrowserCancellation(() =>
+      Runtime.evaluate({
+        expression: `(() => {
         const guard = window.__oracleAttachmentDispatchGuard;
         if (guard?.id !== ${JSON.stringify(guardId)}) return null;
         const summary = { sawKeyDown: guard.sawKeyDown, blocked: guard.blocked };
         guard.cleanup(); return summary;
       })()`,
-      returnByValue: true,
-    }).catch(() => undefined);
+        returnByValue: true,
+      }).catch(() => undefined),
+    );
     delivery = result?.result?.value as typeof delivery;
   }
   if (delivery?.blocked) {
