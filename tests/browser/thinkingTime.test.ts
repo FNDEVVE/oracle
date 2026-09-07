@@ -400,6 +400,8 @@ describe("browser thinking-time selection expression", () => {
     };
     const logs: string[] = [];
 
+    // Best-effort resolution still yields an evidence record, but one that
+    // refuses to claim the tier was confirmed.
     await expect(
       ensureThinkingTime(
         runtime as never,
@@ -407,7 +409,13 @@ describe("browser thinking-time selection expression", () => {
         ((message: string) => logs.push(message)) as never,
         null,
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({
+      requestedLevel: "extended",
+      status: "unverified",
+      verified: false,
+      strictFailClosed: false,
+      source: "chatgpt-thinking-picker",
+    });
 
     expect(logs.at(-1)).toContain("keeping the effort already selected in ChatGPT");
   });
@@ -3116,6 +3124,46 @@ describe("unified Intelligence picker with Advanced -> Effort submenu", () => {
     expect(dom.keys).toEqual([]);
   });
 
+  it("waits for the animated keyboard owner to become visible before changing power", async () => {
+    const dom = buildDirectSlider(3);
+    const originalRect = dom.control.getBoundingClientRect.bind(dom.control);
+    let reads = 0;
+    dom.control.getBoundingClientRect = () =>
+      ++reads < 3 ? { width: 200, height: 0 } : originalRect();
+    await expect(run(dom.documentStub, "pro")).resolves.toEqual({
+      status: "switched",
+      label: "Pro",
+    });
+    expect(dom.keys).toEqual(["ArrowRight"]);
+  });
+
+  it("waits for the keyboard owner to be mounted before changing power", async () => {
+    const dom = buildDirectSlider(3);
+    const query = dom.simple.querySelector.bind(dom.simple);
+    let reads = 0;
+    dom.simple.querySelector = (selector: string) =>
+      selector === "[data-model-reasoning-effort-slider]" && ++reads < 3 ? null : query(selector);
+    await expect(run(dom.documentStub, "pro")).resolves.toEqual({
+      status: "switched",
+      label: "Pro",
+    });
+    expect(dom.keys).toEqual(["ArrowRight"]);
+  });
+
+  it("fails without input when the keyboard owner never mounts", async () => {
+    const dom = buildDirectSlider(3);
+    dom.simple.children.length = 0;
+    expect((await run(dom.documentStub, "pro")).status).toBe("selection-unverified");
+    expect(dom.keys).toEqual([]);
+  });
+
+  it("fails without keyboard input when the direct slider remains hidden", async () => {
+    const dom = buildDirectSlider(3);
+    dom.control.getBoundingClientRect = () => ({ width: 200, height: 0 });
+    expect((await run(dom.documentStub, "pro")).status).toBe("selection-unverified");
+    expect(dom.keys).toEqual([]);
+  });
+
   it.each([
     ["Portuguese", "Pro, 5 de 5."],
     ["Japanese", "Pro、5件中5件目。"],
@@ -3847,7 +3895,7 @@ describe("unified Intelligence picker with Advanced -> Effort submenu", () => {
         ((line: string) => logs.push(line)) as never,
         null,
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ status: "unverified", verified: false });
     expect(logs.join(" ")).toContain("Limit reached. Try again after Aug 16, 2026.");
   });
 
@@ -3899,5 +3947,103 @@ describe("unified Intelligence picker with Advanced -> Effort submenu", () => {
     const logged = logs.join(" ");
     expect(logged).toContain("keeping the effort already selected in ChatGPT");
     expect(logged).not.toContain("continuing with default");
+  });
+});
+
+describe("thinking-effort selection evidence", () => {
+  it("does not report a disabled requested option as the resolved selection", async () => {
+    const runtime = {
+      evaluate: async () => ({
+        result: { value: { status: "option-disabled", label: "Standard", notice: "Unavailable" } },
+      }),
+    };
+    const evidence = await ensureThinkingTime(runtime as never, "standard", () => {}, null);
+    expect(evidence).toMatchObject({
+      requestedLevel: "standard",
+      verified: false,
+      resolvedLabel: null,
+    });
+  });
+  it("records a verified record when the Pro row was already selected", async () => {
+    const runtime = {
+      evaluate: async () => ({
+        result: { value: { status: "already-selected", label: "Pro", modelKind: "pro" } },
+      }),
+    };
+    const evidence = await ensureThinkingTime(
+      runtime as never,
+      "pro",
+      (() => {}) as never,
+      "gpt-5.6-sol",
+    );
+    expect(evidence).toMatchObject({
+      requestedLevel: "pro",
+      status: "already-selected",
+      resolvedLabel: "Pro",
+      verified: true,
+      strictFailClosed: true,
+      observedModelKind: "pro",
+      source: "chatgpt-thinking-picker",
+    });
+    expect(Date.parse(evidence.capturedAt)).not.toBeNaN();
+  });
+
+  it("records a verified record when the picker switched to Pro", async () => {
+    const runtime = {
+      evaluate: async () => ({
+        result: { value: { status: "switched", label: "Pro" } },
+      }),
+    };
+    const evidence = await ensureThinkingTime(
+      runtime as never,
+      "pro",
+      (() => {}) as never,
+      "gpt-5.6-sol",
+    );
+    expect(evidence).toMatchObject({ status: "switched", verified: true, strictFailClosed: true });
+  });
+
+  it("never returns an unverified record for a strict Pro request", async () => {
+    // The whole point of fail-closed: a strict request either produces confirmed
+    // evidence or throws before submit. It must never resolve to verified:false,
+    // because a persisted unverified record would still read as "the run happened".
+    const degraded = [
+      "option-disabled",
+      "chip-not-found",
+      "menu-not-found",
+      "option-not-found",
+      "selection-unverified",
+      "model-kind-not-found",
+      "unknown-status",
+      undefined,
+    ] as const;
+    for (const status of degraded) {
+      const runtime = {
+        evaluate: async () => ({
+          result: { value: status === undefined ? undefined : { status } },
+        }),
+      };
+      await expect(
+        ensureThinkingTime(runtime as never, "pro", (() => {}) as never, "gpt-5.6-sol"),
+      ).rejects.toThrow();
+    }
+  });
+
+  it("marks a non-strict degraded selection unverified rather than silently succeeding", async () => {
+    const runtime = {
+      evaluate: async () => ({ result: { value: { status: "selection-unverified" } } }),
+    };
+    const evidence = await ensureThinkingTime(
+      runtime as never,
+      "standard",
+      (() => {}) as never,
+      null,
+    );
+    expect(evidence).toMatchObject({
+      requestedLevel: "standard",
+      status: "unverified",
+      verified: false,
+      strictFailClosed: false,
+    });
   });
 });
