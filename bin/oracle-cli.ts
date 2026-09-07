@@ -187,6 +187,7 @@ interface CliOptions extends OptionValues {
   showModelId?: boolean;
   retainHours?: number;
   writeOutput?: string;
+  writeArtifacts?: boolean;
   writeOutputPath?: string;
   allowPartial?: boolean;
   partial?: "fail" | "ok";
@@ -577,6 +578,11 @@ program
   .option(
     "--write-output <path>",
     "Write only the final assistant message to this file (overwrites; multi-model appends .<model> before the extension).",
+  )
+  .option(
+    "--write-artifacts",
+    "Also export captured browser files beside --write-output without overwriting existing files (browser runs only).",
+    false,
   )
   .option("--allow-partial", "Exit 0 for multi-model runs when at least one model succeeds.", false)
   .addOption(
@@ -1406,6 +1412,7 @@ function buildRunOptions(
     background: overrides.background ?? undefined,
     renderPlain: overrides.renderPlain ?? options.renderPlain ?? false,
     writeOutputPath: overrides.writeOutputPath ?? options.writeOutputPath,
+    writeArtifacts: overrides.writeArtifacts ?? options.writeArtifacts ?? false,
   };
 }
 
@@ -1709,6 +1716,7 @@ function buildRunOptionsFromMetadata(metadata: SessionMetadata): RunOracleOption
     background: stored.background,
     renderPlain: stored.renderPlain,
     writeOutputPath: stored.writeOutputPath,
+    writeArtifacts: stored.writeArtifacts,
   };
 }
 
@@ -2139,6 +2147,12 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     }
   }
   const activeModel = resolvedOptions.model;
+  if (options.writeArtifacts && engine !== "browser") {
+    throw new Error("--write-artifacts requires --engine browser.");
+  }
+  if (options.writeArtifacts && !resolvedOptions.writeOutputPath) {
+    throw new Error("--write-artifacts requires --write-output <path>.");
+  }
   if (options.reasoningMode && engine !== "api") {
     throw new Error("--reasoning-mode requires --engine api.");
   }

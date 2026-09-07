@@ -24,6 +24,10 @@ The disposable profile and fixtures live in a temporary, non-hidden directory un
 
 The attachment proof also holds composer upload progress active for longer than three seconds inside a non-editable attachment widget nested in a rich-text editor, verifies completion and send both refuse it without input, then clears it and verifies one successful send despite unrelated page progress. Readiness uses explicit loading/busy state and native/ARIA progress controls; filenames and status prose alone cannot establish an active transfer.
 
+### Browser artifact export
+
+For browser file export, run `pnpm build && node scripts/artifact-export-proof.mjs`. It uses the actual CLI and isolated Chrome with synthetic sandbox-download responses, checking answer-only defaults, opt-in binary exports, collision preservation, recorded hashes, and copy-failure warnings. This does not establish current signed-in ChatGPT download or authentication behavior.
+
 ### Signed-in attachment / Work-mode guard
 
 Before the signed-in smoke, run `pnpm build && node scripts/attachment-cli-proof.mjs` for the actual CLI against isolated local and remote Chrome fixtures. It checks per-file bytes, filename-less image evidence, upload progress, final focus/readiness, canonical conversation identity, Work refusal, missing exact send controls, and single submission. Optional `--baseline-cli <path>` demonstrates the older CLI sending after a project-context switch. These synthetic pages do not establish current signed-in ChatGPT behavior.

@@ -19,7 +19,7 @@ import {
   materializeBrowserFallback,
 } from "./prompt.js";
 import { BrowserAutomationError } from "../oracle/errors.js";
-import type { BrowserArchiveResult, BrowserLogger } from "./types.js";
+import type { BrowserArchiveResult, BrowserLogger, SavedBrowserFile } from "./types.js";
 import {
   appendArtifacts,
   saveBrowserTranscriptArtifact,
@@ -47,6 +47,7 @@ export interface BrowserExecutionResult {
   warnings?: BrowserRunWarning[];
   answerText: string;
   artifacts?: SessionArtifact[];
+  savedFiles?: SavedBrowserFile[];
 }
 
 interface RunBrowserSessionArgs {
@@ -408,6 +409,7 @@ async function executeAssembledBrowserSession({
     warnings,
     answerText,
     artifacts: savedArtifacts,
+    savedFiles: browserResult.savedFiles,
   };
 }
 

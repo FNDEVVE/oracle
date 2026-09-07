@@ -276,6 +276,7 @@ export interface StoredRunOptions {
   modelOverrides?: ModelOverridesConfig;
   renderPlain?: boolean;
   writeOutputPath?: string;
+  writeArtifacts?: boolean;
   partialMode?: PartialMode;
   timeoutSeconds?: number | "auto";
   httpTimeoutMs?: number;
@@ -758,6 +759,7 @@ export async function initializeSession(
       zombieTimeoutMs: options.zombieTimeoutMs,
       zombieUseLastActivity: options.zombieUseLastActivity,
       writeOutputPath: options.writeOutputPath,
+      writeArtifacts: options.writeArtifacts,
       partialMode: options.partialMode,
       waitPreference: options.waitPreference,
       youtube: options.youtube,
