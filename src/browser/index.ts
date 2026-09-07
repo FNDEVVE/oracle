@@ -39,6 +39,8 @@ import {
   clearPromptComposer,
   waitForAssistantResponse,
   captureAssistantMarkdown,
+  captureComposerNavigationUrl,
+  assertComposerPlusStayedInPlace,
   clearComposerAttachments,
   uploadAttachmentFile,
   waitForAttachmentCompletion,
@@ -1715,12 +1717,14 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         generatedBundle: a.generatedBundle === true,
       }));
       let inputOnlyAttachments = false;
+      let attachmentNavigationUrl: string | undefined;
       await raceWithDisconnect(clearPromptComposer(Runtime, logger));
       await raceWithDisconnect(ensurePromptReady(Runtime, config.inputTimeoutMs, logger));
       if (submissionAttachments.length > 0) {
         if (!DOM) {
           throw new Error("Chrome DOM domain unavailable while uploading attachments.");
         }
+        attachmentNavigationUrl = await raceWithDisconnect(captureComposerNavigationUrl(Runtime));
         await clearComposerAttachments(Runtime, 5_000, logger);
         for (
           let attachmentIndex = 0;
@@ -1728,12 +1732,15 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           attachmentIndex += 1
         ) {
           const attachment = submissionAttachments[attachmentIndex];
+          await raceWithDisconnect(
+            assertComposerPlusStayedInPlace(Runtime, attachmentNavigationUrl),
+          );
           logger(`Uploading attachment: ${attachment.displayPath}`);
           const uiConfirmed = await uploadAttachmentFile(
             { runtime: Runtime, dom: DOM, input: Input },
             attachment,
             logger,
-            { expectedCount: attachmentIndex + 1 },
+            { expectedCount: attachmentIndex + 1, navigationUrl: attachmentNavigationUrl },
           );
           if (!uiConfirmed) {
             inputOnlyAttachments = true;
@@ -1780,6 +1787,7 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
         attachmentTimeoutMs: config.attachmentTimeoutMs ?? undefined,
         baselineTurns: baselineTurns ?? undefined,
         attachmentNames: attachmentExpectations,
+        attachmentNavigationUrl,
         onPromptSubmitted: markPromptSubmitted,
       };
       const deepResearchTargetBaseline =
@@ -3305,17 +3313,24 @@ async function runRemoteBrowserMode(
         name: path.basename(a.path),
         generatedBundle: a.generatedBundle === true,
       }));
+      let attachmentNavigationUrl: string | undefined;
       await clearPromptComposer(Runtime, logger);
       await ensurePromptReady(Runtime, config.inputTimeoutMs, logger);
       if (submissionAttachments.length > 0) {
         if (!DOM) {
           throw new Error("Chrome DOM domain unavailable while uploading attachments.");
         }
+        attachmentNavigationUrl = await captureComposerNavigationUrl(Runtime);
         await clearComposerAttachments(Runtime, 5_000, logger);
         // Use remote file transfer for remote Chrome (reads local files and injects via CDP)
         for (const attachment of submissionAttachments) {
+          await assertComposerPlusStayedInPlace(Runtime, attachmentNavigationUrl);
           logger(`Uploading attachment: ${attachment.displayPath}`);
-          await uploadAttachmentViaDataTransfer({ runtime: Runtime, dom: DOM }, attachment, logger);
+          await uploadAttachmentViaDataTransfer(
+            { runtime: Runtime, dom: DOM, navigationUrl: attachmentNavigationUrl },
+            attachment,
+            logger,
+          );
           await delay(500);
         }
         // Scale timeout based on number of files: base 30s + 15s per additional file
@@ -3355,6 +3370,7 @@ async function runRemoteBrowserMode(
         attachmentTimeoutMs: config.attachmentTimeoutMs ?? undefined,
         baselineTurns: baselineTurns ?? undefined,
         attachmentNames: attachmentExpectations,
+        attachmentNavigationUrl,
         onPromptSubmitted: markPromptSubmitted,
       };
       const deepResearchTargetBaseline =
