@@ -1100,6 +1100,12 @@ function buildThinkingTimeExpression(
       };
       let current = resolve();
       const finish = (result) => { closeOpenMenus(); return result; };
+      // The picker can expose its simple view before the keyboard owner is mounted or visible.
+      const readyDeadline = performance.now() + MAX_WAIT_MS;
+      while (!current && performance.now() < readyDeadline) {
+        await sleep(100);
+        current = resolve();
+      }
       if (!current) return finish(failure('selection-unverified'));
       // Preserve the legacy Pro-model + extended contract on unified pickers.
       const target = TARGET_MODEL_KIND === 'pro' && TARGET_LEVEL === 'extended' ? 'pro' : TARGET_LEVEL;
