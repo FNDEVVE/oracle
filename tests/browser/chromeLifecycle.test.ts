@@ -111,6 +111,38 @@ describe("registerTerminationHooks", () => {
     expect(chrome.kill).toHaveBeenCalledTimes(1);
     expect(cleanupMock).toHaveBeenCalledWith(userDataDir, logger, { lockRemovalMode: "never" });
   });
+
+  test("never kills shared manual-login Chrome from a signal hook", async () => {
+    const { registerTerminationHooks } = await import("../../src/browser/chromeLifecycle.js");
+    const chrome = {
+      kill: vi.fn().mockResolvedValue(undefined),
+      pid: 1234,
+      port: 9222,
+    };
+    const logger = vi.fn();
+    const previousExitCode = process.exitCode;
+    const removeHooks = registerTerminationHooks(
+      chrome as unknown as import("chrome-launcher").LaunchedChrome,
+      "/tmp/oracle-shared-manual-login-profile",
+      false,
+      logger,
+      {
+        isInFlight: () => false,
+        preserveUserDataDir: true,
+        preserveSharedChromeOnSignal: true,
+      },
+    );
+
+    try {
+      process.emit("SIGTERM");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(chrome.kill).not.toHaveBeenCalled();
+      expect(logger).toHaveBeenCalledWith(expect.stringContaining("leaving Chrome running"));
+    } finally {
+      removeHooks();
+      process.exitCode = previousExitCode;
+    }
+  });
 });
 
 describe("copied-profile launch flags", () => {
@@ -170,6 +202,45 @@ describe("hidden-window launch flags", () => {
         process.env.ORACLE_CHROME_NO_SANDBOX = previous;
       }
     }
+  });
+
+  test("detaches only shared Windows profiles, never temporary or copied profiles", async () => {
+    const { shouldDetachSharedChromeForTest } =
+      await import("../../src/browser/chromeLifecycle.js");
+    expect(shouldDetachSharedChromeForTest({ manualLogin: true }, "win32")).toBe(true);
+    expect(shouldDetachSharedChromeForTest({ manualLogin: false }, "win32")).toBe(false);
+    expect(
+      shouldDetachSharedChromeForTest({ manualLogin: true, copyProfileSource: "source" }, "win32"),
+    ).toBe(false);
+    expect(shouldDetachSharedChromeForTest({ manualLogin: true }, "linux")).toBe(false);
+    expect(shouldDetachSharedChromeForTest({ manualLogin: true }, "darwin")).toBe(false);
+  });
+
+  test("detaches Windows Chrome from the controller process without opening a console", async () => {
+    const { resolveChromeChildSpawnOptionsForTest } =
+      await import("../../src/browser/chromeLifecycle.js");
+    const stdio: Array<"ignore" | number> = ["ignore", 1, 2];
+
+    expect(
+      resolveChromeChildSpawnOptionsForTest(
+        { detached: false, windowsHide: false, stdio },
+        "win32",
+      ),
+    ).toMatchObject({
+      detached: true,
+      windowsHide: true,
+      stdio,
+    });
+    expect(
+      resolveChromeChildSpawnOptionsForTest(
+        { detached: false, windowsHide: false, stdio },
+        "linux",
+      ),
+    ).toMatchObject({
+      detached: false,
+      windowsHide: false,
+      stdio,
+    });
   });
 
   test.skipIf(process.platform !== "darwin")(

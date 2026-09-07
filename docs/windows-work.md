@@ -15,3 +15,7 @@ Read this file whenever you're working from Windows and add new findings so the 
 Future Windows gotchas belong here. Update this doc when you learn something new.
 
 - ChatGPT sidebar/history labels can include phrases like "Login setup instruction"; login probes must match exact auth CTAs, not any visible text starting with login, or manual-login automation loops forever before typing.
+
+- Shared manual-login Chrome is detached from its native Windows controller and launched with `windowsHide`; temporary and copied profiles retain their existing process lifecycle. The final verified lease owner terminates the matching Chrome PID/profile.
+- After upgrading this lease protocol, restart all Oracle browser controllers before sharing a profile. Older live controllers can forcibly remove a registry lock after their timeout; stored legacy records remain readable, but simultaneous mixed-version controllers are not a safe upgrade path.
+- Run `node scripts/shared-chrome-lifecycle-proof.mjs` after building for the native two-controller check. It uses a freshly initialized, signed-out profile and locally supplied pages, verifies peer CDP access after the owner exits, then checks final registry/process/endpoint cleanup. It does not prove signed-in ChatGPT concurrency or backend model identity.

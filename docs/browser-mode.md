@@ -400,3 +400,19 @@ This mode is ideal when you have a macOS VM (or spare Mac mini) logged into Chat
 - Gemini web (cookie) smoke: `ORACLE_LIVE_TEST=1 pnpm vitest run tests/live/gemini-web-live.test.ts` (requires a signed-in Chrome profile at `gemini.google.com`)
 - `pnpm test --filter browser` does not exist yet; manual runs with `--engine browser -v` are the current validation path.
 - Most of the heavy lifting lives in `src/browserMode.ts`. If you change selectors or the mutation observer logic, run a local `oracle --engine browser --browser-keep-browser` session so you can inspect DevTools before cleanup.
+
+### Shared-profile lifecycle
+
+Controllers keep independent leases while sharing a manual-login Chrome process.
+A completing controller releases only its own lease; the verified final owner
+performs process cleanup while holding the registry lock. Unknown ownership,
+malformed owner records, and transient liveness failures preserve the browser.
+Owner records are published atomically, so a crash during initialization leaves
+an ownerless lock that can be reclaimed after five minutes. If external corruption
+leaves a malformed `oracle-tab-leases.lock/owner.json`, stop every Oracle controller
+using that profile before removing that profile's `oracle-tab-leases.lock` directory;
+then restart the controllers. Do not remove the lock while any controller is active.
+Restart all browser controllers together after upgrading: older live controllers
+used a different lock-timeout recovery rule. Existing stored lease records remain
+readable. Native Windows shared-profile Chrome is detached from its launching
+controller; this does not change temporary or copied-profile launch policy.
