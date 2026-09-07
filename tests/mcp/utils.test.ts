@@ -37,6 +37,17 @@ describe("mapConsultToRunOptions", () => {
     expect(runOptions.model).toBe("gpt-6-pro");
   });
 
+  test("rejects gpt-6-pro in multi-model consult coerced to API mode", () => {
+    expect(() =>
+      mapConsultToRunOptions({
+        prompt: "test astra",
+        files: [],
+        engine: "browser",
+        models: ["gpt-6-pro"],
+      }),
+    ).toThrow(/GPT-6 Pro is an API reasoning mode, not a model slug/);
+  });
+
   test("maps browser follow-ups into run options", () => {
     const env: NodeJS.ProcessEnv = {};
     const { runOptions, resolvedEngine } = mapConsultToRunOptions({

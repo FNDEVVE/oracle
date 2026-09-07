@@ -109,9 +109,18 @@ export function resolveRunOptionsFromConfig({
     isCodex || isClaude || isGrok || azureAutoApi || normalizedRequestedModels.length > 0
       ? "api"
       : resolvedEngine;
+  if (fixedEngine === "api") {
+    if (isGpt6ProAlias(cliModelArg)) {
+      resolveApiModel(cliModelArg);
+    }
+    for (const entry of normalizedRequestedModels) {
+      if (isGpt6ProAlias(entry)) {
+        resolveApiModel(entry);
+      }
+    }
+  }
   // Browser runs use ChatGPT picker labels/aliases; API runs must keep API model ids intact.
   const resolvedModel = fixedEngine === "browser" ? browserModel : apiModel;
-
   const promptWithSuffix =
     userConfig?.promptSuffix && userConfig.promptSuffix.trim().length > 0
       ? `${prompt.trim()}\n${userConfig.promptSuffix}`
