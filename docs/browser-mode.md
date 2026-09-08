@@ -68,7 +68,8 @@ Notes:
     -p "Summarize the last assistant response in one paragraph"
   ```
 - Oracle first reads local `DevToolsActivePort` metadata. If no matching metadata exists, it probes the selected local endpoint's `/json/version` (including IPv6) for the browser websocket. Each of two attempts has a one-second deadline covering headers and the complete response body, with a 500 ms pause before retrying. It then reuses the normal CDP automation flow without taking ownership of the browser profile.
-- If Chrome shows a remote-debugging approval prompt on first attach, Oracle issues one attach request and waits briefly for you to allow it before failing.
+- Chrome 144+ can show an **Allow remote debugging?** prompt for **each browser connection**, including reconnects and session reattach (which lists tabs and then attaches with separate connections). Approval for one connection does not approve the next. Keep **at least one Chrome window open**: a background-only Chrome started with `--no-startup-window` cannot display the approval sheet.
+- Oracle waits 20 seconds per approval by default. Use `--browser-approval-wait 5m` to allow five minutes, `ORACLE_BROWSER_APPROVAL_WAIT=5m`, or `browser.approvalWaitMs: 300000` in configuration. Durations accept milliseconds or `ms`/`s`/`m`/`h` units; they must be positive. CLI flags override the environment, which overrides saved CLI configuration. Session reattach uses the saved wait (or the environment/default for older sessions). The service host controls its own approval wait. Oracle logs when each connection starts waiting and every 15 seconds until it connects or fails; click Allow for each prompt. It keeps a pending connection open rather than issuing parallel approval requests.
 - Attach mode always opens a fresh Oracle-owned tab and closes only that tab after a successful run.
 - Cookie sync, Chrome launch flags, and profile lifecycle flags are skipped because the browser is already running.
 - If Chrome is not exposing a classic `/json/version` endpoint, use `--browser-attach-running` instead of standalone `--remote-chrome`.
@@ -93,6 +94,7 @@ Notes:
 - `--engine browser`: enables browser mode (legacy `--browser` remains as an alias for now). Without `--engine`, Oracle chooses API when `OPENAI_API_KEY` exists, otherwise browser.
 - `--browser-chrome-profile`: selects the cookie source profile when copying is explicitly enabled. `--browser-chrome-path` overrides the launched Chrome/Chromium binary.
 - `--browser-cookie-path`: explicit path to the Chrome/Chromium/Edge `Cookies` SQLite DB. Handy when you launch a fork via `--browser-chrome-path` and want to copy its session cookies; see [docs/chromium-forks.md](chromium-forks.md) for examples.
+- `--browser-approval-wait <duration>`: time to allow each Chrome remote-debugging connection (default `20s`); also `browser.approvalWaitMs` or `ORACLE_BROWSER_APPROVAL_WAIT`.
 - `--browser-attach-running`: attach to a local already-running browser instead of launching Chrome directly. Defaults to `127.0.0.1:9222`; combine with `--remote-chrome <host:port>` to use a different local attach hint.
 - `--chatgpt-url`: override the ChatGPT base URL. Works with the root homepage (`https://chatgpt.com/`), Temporary Chat (`https://chatgpt.com/?temporary-chat=true`), **or** a specific workspace/folder link such as `https://chatgpt.com/g/.../project`. `--browser-url` stays as a hidden alias.
 - `--browser-timeout`, `--browser-input-timeout`, `--browser-attachment-timeout`: `1200s (20m)`/`60s`/`45s` defaults. The input timeout bounds local prompt/file preparation and browser-input readiness; it does not shorten attachment uploads or assistant-response waits. The attachment timeout controls upload/readiness before clicking Send and can also be set with `ORACLE_BROWSER_ATTACHMENT_TIMEOUT` or `browser.attachmentTimeoutMs`. Durations accept `ms`, `s`, `m`, or `h` and can be chained (`1h2m10s`).
@@ -186,6 +188,8 @@ If ChatGPT initially exposes only `Called tool` / `Used tool`, Oracle treats tha
 Deep Research is browser-only. It does not use connected apps in v1; give it public-web scope, uploaded files, and any domain/source guidance in the prompt. For deep thinking over code or architecture without web search, prefer a normal browser run with GPT-5.6 Sol and `--browser-thinking-time extra-high`, or a Pro model with `--browser-thinking-time extended`.
 
 Completed browser sessions also save durable artifacts under `~/.oracle/sessions/<id>/artifacts/`. Deep Research writes the extracted report to `deep-research-report.md`, and every browser run writes `transcript.md` with the prompt, final answer, conversation URL, and saved artifact references. Use `--write-output <path>` when you also need a copy of just the final answer at a specific path.
+
+For a new browser run, add `--write-artifacts` with `--write-output <path>` to copy captured files beside the written answer. This is opt-in; plain `--write-output` still writes only the answer. Canonical session files stay intact, binary copies are checked against their recorded size and SHA-256, and existing files are preserved using numbered names such as `report-2.csv`. Copy failures are logged and saved in session warnings while the answer remains successful. Files that could not be captured or transferred from a remote host cannot be exported; the existing manual-copy guidance still applies.
 
 When ChatGPT generates downloadable files in the assistant response (for example a ZIP, wheel, source distribution, CSV, or PDF), Oracle saves those files beside the transcript before any archive attempt. The downloader is intentionally narrow: it only follows ChatGPT-owned file/download URLs from the assistant response and uses `sandbox:/mnt/data/...` links as source metadata and filename hints, not as arbitrary fetch targets. External links in the response are left in the transcript but are not downloaded. In bridge mode, a patched Windows host advertises artifact-transfer capability through `/health`; the Linux client then pulls each saved file over the authenticated bridge endpoint, stores it under the Linux session `artifacts/` directory, and verifies safe filename, byte size, SHA-256, and ZIP structure where applicable. If either side is older or transfer validation fails, the text response still completes and Oracle prints a manual-copy fallback instead of leaking host paths or signed download URLs.
 
@@ -345,6 +349,14 @@ Key behavior:
 
 ### Remote Service Mode (`oracle serve`)
 
+To host requests through an already-running signed-in Chrome, start the service with:
+
+```bash
+oracle serve --host 127.0.0.1 --browser-attach-running --remote-chrome 127.0.0.1:9222 --browser-approval-wait 5m
+```
+
+These are **host settings**: `browser.attachRunning`, `browser.remoteChrome`, and `browser.approvalWaitMs` in the service host configuration also apply. Explicit flags override configuration; `ORACLE_BROWSER_APPROVAL_WAIT` overrides the configured wait unless the flag is supplied. Attach-running mode (or a standalone `--remote-chrome` endpoint for classic DevTools HTTP) skips cookie extraction and manual-login Chrome startup. Each run uses the selected browser; service shutdown leaves that browser running. With no attachment settings, the existing dedicated manual-login default remains. Clients cannot override the host endpoint, attach mode, or approval wait. Add `--max-concurrent-runs 2 --max-queued-runs 8` to opt into bounded admission.
+
 Prefer to keep Chrome entirely on the remote Mac (no DevTools tunneling, no manual cookie shuffling)? Use the built-in service:
 
 1. **Start the host**
@@ -386,9 +398,17 @@ Prefer to keep Chrome entirely on the remote Mac (no DevTools tunneling, no manu
    - `oracle serve` logs the DevTools port of the manual-login Chrome (e.g., `Manual-login Chrome DevTools port: 54371`). Runs automatically attach to that logged-in Chrome; you can use the printed port/JSON URL for debugging if needed.
 
 4. **Stop the host**
-   - `Ctrl+C` on the VM shuts down the HTTP server and Chrome. Restart `oracle serve` whenever you need a new session; omit `--token` to let it rotate automatically.
+   - `Ctrl+C` on the VM shuts down the HTTP server. Shared manual-login Chrome can remain available for reuse. Restart `oracle serve` whenever you need a new session; omit `--token` to let it rotate automatically.
 
 This mode is ideal when you have a macOS VM (or spare Mac mini) logged into ChatGPT and you just want to run the CLI from another machine without ever copying profiles or keeping Chrome visible locally.
+
+#### Optional concurrent admission
+
+Plain `oracle serve` retains single-flight admission and HTTP 409 `busy`. To opt into FIFO queueing, use `oracle serve --max-concurrent-runs 2 --max-queued-runs 8`. The queue defaults to eight waiting requests; zero disables waiting. Active capacity is clamped to the host's browser tab limit, resolved from host configuration, then `ORACLE_BROWSER_MAX_CONCURRENT_TABS`, then the existing default of three. Client settings cannot raise that limit. `/health` reports the effective active/queued counts and limits. A full opt-in queue returns HTTP 503 `queue_full` with `Retry-After: 60`.
+
+In queue mode, a disconnected caller gives up its waiting position or cancels its active automation. Owned targets are closed unless the caller explicitly requested they remain open; borrowed tabs and the shared Chrome process are preserved. Cancellation stops further automation and cleans up resources that arrive late, but does not undo an already submitted prompt or attest that ChatGPT stopped backend generation. Host artifact sessions receive a sanitized per-run namespace, so clients with the same slug do not share files.
+
+Programmatic `BrowserRunOptions.signal` requests cancellation explicitly even on a host using legacy admission. The client checks the host's `runCancellation` capability before sending such a run; older hosts remain usable without an AbortSignal. Plain clients on a legacy host retain their existing disconnect behavior.
 
 ## Limitations / Follow-Up Plan
 

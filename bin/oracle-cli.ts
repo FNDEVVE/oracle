@@ -43,6 +43,7 @@ import {
   dedupePathInputs,
 } from "../src/cli/options.js";
 import { copyToClipboard } from "../src/cli/clipboard.js";
+import { isGpt6ProAlias } from "../src/cli/browserConfig.js";
 import { buildMarkdownBundle } from "../src/cli/markdownBundle.js";
 import { shouldDetachSession, stopDetachedWorker } from "../src/cli/detach.js";
 import { launchDetachedSession } from "../src/cli/detachedSession.js";
@@ -128,6 +129,7 @@ interface CliOptions extends OptionValues {
   browserUrl?: string;
   browserTimeout?: string;
   browserInputTimeout?: string;
+  browserApprovalWait?: string;
   browserAttachmentTimeout?: string;
   browserProfileLockTimeout?: string;
   browserMaxConcurrentTabs?: string;
@@ -187,6 +189,7 @@ interface CliOptions extends OptionValues {
   showModelId?: boolean;
   retainHours?: number;
   writeOutput?: string;
+  writeArtifacts?: boolean;
   writeOutputPath?: string;
   allowPartial?: boolean;
   partial?: "fail" | "ok";
@@ -447,19 +450,15 @@ program
       .default([]),
   )
   .addOption(
-    new Option("--reasoning-effort <effort>", "Reasoning effort for GPT-5.6 API models.").choices([
-      "none",
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ]),
+    new Option(
+      "--reasoning-effort <effort>",
+      "Reasoning effort for GPT-6 Astra and GPT-5.6 API models (Astra requires low or higher).",
+    ).choices(["none", "low", "medium", "high", "xhigh", "max"]),
   )
   .addOption(
     new Option(
       "--reasoning-mode <mode>",
-      'Responses API reasoning execution mode for GPT-5.6 models ("standard" or "pro").',
+      'Responses API reasoning execution mode for GPT-6 Astra and GPT-5.6 models ("standard" or "pro").',
     ).choices(["standard", "pro"]),
   )
   .addOption(
@@ -578,6 +577,11 @@ program
     "--write-output <path>",
     "Write only the final assistant message to this file (overwrites; multi-model appends .<model> before the extension).",
   )
+  .option(
+    "--write-artifacts",
+    "Also export captured browser files beside --write-output without overwriting existing files (browser runs only).",
+    false,
+  )
   .option("--allow-partial", "Exit 0 for multi-model runs when at least one model succeeds.", false)
   .addOption(
     new Option("--partial <mode>", "Multi-model failure policy (fail | ok).")
@@ -669,6 +673,12 @@ program
       "--browser-input-timeout <ms|s|m>",
       "Maximum time to wait for the prompt textarea (default 60s).",
     ).hideHelp(),
+  )
+  .addOption(
+    new Option(
+      "--browser-approval-wait <duration>",
+      "Wait for each Chrome remote-debugging approval prompt (default 20s; e.g. 5m).",
+    ).env("ORACLE_BROWSER_APPROVAL_WAIT"),
   )
   .addOption(
     new Option(
@@ -960,6 +970,14 @@ program
   .option("--port <number>", "Port to listen on (default random).", parseIntOption)
   .option("--token <value>", "Access token clients must provide (random if omitted).")
   .option(
+    "--max-concurrent-runs <count>",
+    "Opt into concurrent runs and FIFO queueing; clamped to the host browser tab cap (default remains single-flight HTTP 409).",
+  )
+  .option(
+    "--max-queued-runs <count>",
+    "Waiting requests in opt-in queue mode (default 8; 0 disables waiting).",
+  )
+  .option(
     "--manual-login",
     "Use a dedicated Chrome profile for manual login (recommended when cookie sync is unavailable).",
     false,
@@ -975,10 +993,21 @@ program
   )
   .action(async (commandOptions) => {
     const { serveRemote } = await import("../src/remote/server.js");
+    const { buildServeBrowserConfig } = await import("../src/cli/serveBrowserConfig.js");
+    const { config } = await loadUserConfig();
     await serveRemote({
+      browserConfig: buildServeBrowserConfig(program.opts<CliOptions>(), config),
       host: commandOptions.host,
       port: commandOptions.port,
       token: commandOptions.token,
+      maxConcurrentRuns:
+        commandOptions.maxConcurrentRuns === undefined
+          ? undefined
+          : Number(commandOptions.maxConcurrentRuns),
+      maxQueuedRuns:
+        commandOptions.maxQueuedRuns === undefined
+          ? undefined
+          : Number(commandOptions.maxQueuedRuns),
       manualLoginDefault: commandOptions.manualLogin,
       manualLoginProfileDir: commandOptions.manualLoginProfileDir,
       cookieSyncDefault: commandOptions.browserCookieSync,
@@ -1406,6 +1435,7 @@ function buildRunOptions(
     background: overrides.background ?? undefined,
     renderPlain: overrides.renderPlain ?? options.renderPlain ?? false,
     writeOutputPath: overrides.writeOutputPath ?? options.writeOutputPath,
+    writeArtifacts: overrides.writeArtifacts ?? options.writeArtifacts ?? false,
   };
 }
 
@@ -1709,6 +1739,7 @@ function buildRunOptionsFromMetadata(metadata: SessionMetadata): RunOracleOption
     background: stored.background,
     renderPlain: stored.renderPlain,
     writeOutputPath: stored.writeOutputPath,
+    writeArtifacts: stored.writeArtifacts,
   };
 }
 
@@ -1833,9 +1864,19 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   }
 
   const providerMode = resolveApiProviderMode(options);
-  const engineModels = multiModelProvided
-    ? Array.from(new Set(options.models!.map((entry) => resolveApiModel(entry))))
-    : [resolveApiModel(normalizeModelOption(options.model) || DEFAULT_MODEL)];
+  // Engine discovery must not apply API-only validation to browser aliases.
+  const engineModelInputs = multiModelProvided
+    ? options.models!
+    : [normalizeModelOption(options.model) || DEFAULT_MODEL];
+  const engineModels = Array.from(
+    new Set(
+      engineModelInputs.map((entry) =>
+        isGpt6ProAlias(entry) && !options.route && !options.preflight
+          ? ("gpt-6-pro" as ModelName)
+          : resolveApiModel(entry),
+      ),
+    ),
+  );
   if (options.route || options.preflight) {
     const routeAzureEndpoint = firstNonEmpty(
       options.azureEndpoint,
@@ -2139,6 +2180,12 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     }
   }
   const activeModel = resolvedOptions.model;
+  if (options.writeArtifacts && engine !== "browser") {
+    throw new Error("--write-artifacts requires --engine browser.");
+  }
+  if (options.writeArtifacts && !resolvedOptions.writeOutputPath) {
+    throw new Error("--write-artifacts requires --write-output <path>.");
+  }
   if (options.reasoningMode && engine !== "api") {
     throw new Error("--reasoning-mode requires --engine api.");
   }

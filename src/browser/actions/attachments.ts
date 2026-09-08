@@ -1,3 +1,4 @@
+import { withoutBrowserCancellation } from "../cancellation.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ChromeClient, BrowserAttachment, BrowserLogger } from "../types.js";
@@ -194,9 +195,10 @@ export async function activateComposerPlus(
       await input.dispatchKeyEvent({ type: "keyUp", ...enter });
     }
   } finally {
-    const observed = await runtime
-      .evaluate({
-        expression: `(() => {
+    const observed = await withoutBrowserCancellation(() =>
+      runtime
+        .evaluate({
+          expression: `(() => {
         const guards = window.__oracleAttachmentPlusGuards;
         const guard = guards?.[${JSON.stringify(guardId)}];
         const nodes = window.__oracleAttachmentPlusNodes;
@@ -205,9 +207,10 @@ export async function activateComposerPlus(
         const summary = { sawKeyDown: guard.sawKeyDown, clicked: guard.clicked, blocked: guard.blocked };
         guard.cleanup(); delete guards[${JSON.stringify(guardId)}]; return summary;
       })()`,
-        returnByValue: true,
-      })
-      .catch(() => undefined);
+          returnByValue: true,
+        })
+        .catch(() => undefined),
+    );
     delivery = observed?.result?.value as typeof delivery;
   }
   if (delivery?.blocked) {

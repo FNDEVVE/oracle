@@ -1,3 +1,4 @@
+import { withoutBrowserCancellation } from "../cancellation.js";
 import { randomUUID } from "node:crypto";
 import type { ChromeClient } from "../types.js";
 import { INPUT_SELECTORS } from "../constants.js";
@@ -135,10 +136,12 @@ export async function stageAttachmentPrompt(
       );
     return value.length ?? 0;
   } finally {
-    await runtime
-      .evaluate({
-        expression: `(() => { const guards = window.__oracleAttachmentPromptGuards; const guard = guards?.[${JSON.stringify(id)}]; guard?.cleanup(); if (guards) delete guards[${JSON.stringify(id)}]; })()`,
-      })
-      .catch(() => undefined);
+    await withoutBrowserCancellation(() =>
+      runtime
+        .evaluate({
+          expression: `(() => { const guards = window.__oracleAttachmentPromptGuards; const guard = guards?.[${JSON.stringify(id)}]; guard?.cleanup(); if (guards) delete guards[${JSON.stringify(id)}]; })()`,
+        })
+        .catch(() => undefined),
+    );
   }
 }

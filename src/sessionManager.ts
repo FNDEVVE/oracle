@@ -41,6 +41,8 @@ export interface BrowserSessionConfig {
   timeoutMs?: number;
   debugPort?: number | null;
   inputTimeoutMs?: number;
+  /** Time budget for each Chrome remote-debugging approval prompt. */
+  approvalWaitMs?: number;
   /** Time budget for attachment upload/readiness before clicking send. */
   attachmentTimeoutMs?: number;
   /** Delay before rechecking the conversation after an assistant timeout. */
@@ -276,6 +278,7 @@ export interface StoredRunOptions {
   modelOverrides?: ModelOverridesConfig;
   renderPlain?: boolean;
   writeOutputPath?: string;
+  writeArtifacts?: boolean;
   partialMode?: PartialMode;
   timeoutSeconds?: number | "auto";
   httpTimeoutMs?: number;
@@ -758,6 +761,7 @@ export async function initializeSession(
       zombieTimeoutMs: options.zombieTimeoutMs,
       zombieUseLastActivity: options.zombieUseLastActivity,
       writeOutputPath: options.writeOutputPath,
+      writeArtifacts: options.writeArtifacts,
       partialMode: options.partialMode,
       waitPreference: options.waitPreference,
       youtube: options.youtube,

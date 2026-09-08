@@ -19,7 +19,7 @@ import {
   materializeBrowserFallback,
 } from "./prompt.js";
 import { BrowserAutomationError } from "../oracle/errors.js";
-import type { BrowserArchiveResult, BrowserLogger } from "./types.js";
+import type { BrowserArchiveResult, BrowserLogger, SavedBrowserFile } from "./types.js";
 import {
   appendArtifacts,
   saveBrowserTranscriptArtifact,
@@ -47,6 +47,7 @@ export interface BrowserExecutionResult {
   warnings?: BrowserRunWarning[];
   answerText: string;
   artifacts?: SessionArtifact[];
+  savedFiles?: SavedBrowserFile[];
 }
 
 interface RunBrowserSessionArgs {
@@ -251,7 +252,7 @@ async function executeAssembledBrowserSession({
     if (typeof message !== "string") return;
     const shouldAlwaysPrint =
       message.startsWith("[browser] ") &&
-      /archive|fallback|follow-up|retry|thinking|waiting for chatgpt|browser slot|browser control|browser guidance|model selection|model picker/i.test(
+      /archive|fallback|follow-up|retry|thinking|waiting for chatgpt|remote debugging approval|browser slot|browser control|browser guidance|model selection|model picker/i.test(
         message,
       );
     if (!runOptions.verbose && !shouldAlwaysPrint) return;
@@ -408,6 +409,7 @@ async function executeAssembledBrowserSession({
     warnings,
     answerText,
     artifacts: savedArtifacts,
+    savedFiles: browserResult.savedFiles,
   };
 }
 

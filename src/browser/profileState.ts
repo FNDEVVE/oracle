@@ -319,6 +319,7 @@ export async function acquireProfileRunLock(
     pollMs?: number;
     logger?: ProfileStateLogger;
     sessionId?: string;
+    signal?: AbortSignal;
   },
 ): Promise<ProfileRunLock | null> {
   const timeoutMs = options.timeoutMs;
@@ -335,6 +336,7 @@ export async function acquireProfileRunLock(
   let warned = false;
 
   for (;;) {
+    options.signal?.throwIfAborted();
     try {
       const payload: ProfileRunLockRecord = {
         pid: process.pid,
@@ -358,7 +360,7 @@ export async function acquireProfileRunLock(
       let existing = parseProfileRunLock(await readFile(lockPath, "utf8").catch(() => null));
       if (!existing) {
         // Likely partial write / corruption; re-read once, then delete (user preference: delete unreadable lockfiles).
-        await delay(200);
+        await delay(200, options.signal);
         existing = parseProfileRunLock(await readFile(lockPath, "utf8").catch(() => null));
         if (!existing) {
           options.logger?.("Oracle profile lock unreadable; deleting lockfile.");
@@ -383,7 +385,7 @@ export async function acquireProfileRunLock(
           `Oracle profile lock still held by pid ${existing.pid} after ${Math.round(elapsed / 1000)}s`,
         );
       }
-      await delay(Math.min(pollMs, timeoutMs - elapsed));
+      await delay(Math.min(pollMs, timeoutMs - elapsed), options.signal);
     }
   }
 }

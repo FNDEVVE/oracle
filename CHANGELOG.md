@@ -2,12 +2,19 @@
 
 ## Unreleased
 
+## 0.19.0 - 2026-09-07
+
 **Highlights:** Durable detached MCP consultations, modern and legacy MCP client support, and clearer browser capture failures with preserved recovery evidence.
 
-- Browser: support GPT-6 Astra as ChatGPT's "Latest" model (`gpt-6-pro`, `gpt-6-astra`, `gpt-6`, `latest`), recognize version-prefixed Astra effort controls (`6 Pro`, `6 High`), and match Japanese `最新` and `極高` while preserving fail-closed Pro slider verification.
 - MCP: start local consultations with opt-in detached workers and wait for durable completion without cancelling the run when a client times out, cancels a wait, or reconnects. Fixes #429; thanks @oraclexing.
 - MCP: support the modern 2026-07-28 protocol through SDK v2 while preserving legacy stdio clients, tool contracts, session resources, and request-scoped progress logging. Fixes #360; thanks @fredluz.
+- Browser: keep attachment uploads and sends in the original chat, validate exact controls at delivery, and stop context/focus races without replaying a dispatched action; thanks @oraclexing.
+- Browser: optionally export captured downloadable files beside --write-output with --write-artifacts, preserving canonical artifacts, validating hashes, and avoiding filename collisions; thanks @gwelinder.
+- Browser: persist and display thinking-effort selection evidence, including remote results, without treating unverified or disabled options as confirmed selections; thanks @frontierkodiak.
+- Remote: add opt-in bounded concurrent run admission with FIFO queuing, host-cap enforcement, cancellation, and isolated artifacts while preserving default single-flight HTTP 409 behavior; thanks @frontierkodiak.
+- Remote: honor the service host’s attach-running, remote-Chrome, and approval-wait settings, reusing its signed-in browser without launching a separate manual-login Chrome while keeping routing under host control.
 - Browser: preserve shared Chrome across concurrent manual-login controllers, verify final lease ownership before shutdown, and harden lock recovery against transient process probes; thanks @oraclexing.
+- Browser: make each Chrome remote-debugging approval wait configurable with --browser-approval-wait, preserve the 20-second default, and show progress while waiting for per-connection approval.
 - Browser: wait for effort slider controls to mount and become visible before selecting the requested tier; thanks @ShunmeiCho.
 - Browser: detect when a later harvest conflicts with saved conversation identities, preserve the original transcript and answer, and record explicit manual target overrides. Fixes #442; thanks @postoso.
 - Browser: fail promptly on known English Retry failures, preserve manual recovery, and keep waiting while generation remains active; apply the same guard to image output and response recovery. Fixes #457; thanks @developerisnow.

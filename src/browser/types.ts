@@ -73,6 +73,8 @@ export interface BrowserAutomationConfig {
   timeoutMs?: number;
   debugPort?: number | null;
   inputTimeoutMs?: number;
+  /** Time budget for each Chrome remote-debugging approval prompt. */
+  approvalWaitMs?: number;
   /** Time budget for attachment upload/readiness before clicking send. */
   attachmentTimeoutMs?: number;
   /** Delay before rechecking the conversation after an assistant timeout. */
@@ -123,6 +125,16 @@ export interface BrowserAutomationConfig {
 
 export interface BrowserRunOptions {
   prompt: string;
+  /**
+   * Abort the run when the caller no longer wants it.
+   *
+   * A browser run outlives the request that asked for it: the model keeps
+   * thinking, the tab stays open, and the shared-profile slot stays taken. A
+   * caller that has disconnected has no way to say so without this, so the run
+   * continues to completion and its capacity is only returned by accident of
+   * finishing.
+   */
+  signal?: AbortSignal;
   attachments?: BrowserAttachment[];
   /**
    * Optional secondary submission to try if the initial prompt is rejected by ChatGPT
@@ -155,6 +167,8 @@ export interface BrowserRunOptions {
    * and attached-existing tabs are still preserved for recovery/user ownership.
    */
   closeOwnedTabOnComplete?: boolean;
+  /** Close a cancelled run's owned target while keeping a shared browser process. */
+  closeOwnedTabOnCancel?: boolean;
   /** Optional hook to persist runtime info and current model evidence as soon as Chrome is ready. */
   runtimeHintCb?: (
     hint: BrowserRuntimeMetadata,

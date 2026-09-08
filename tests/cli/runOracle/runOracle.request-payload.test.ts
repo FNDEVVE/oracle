@@ -232,7 +232,7 @@ describe("runOracle request payload", () => {
           log: () => {},
         },
       ),
-    ).rejects.toThrow('Reasoning effort "none" is not supported for GPT-6 Astra');
+    ).rejects.toThrow('Reasoning effort "none" is not supported for gpt-6-astra');
     expect(client.lastRequest).toBeNull();
   });
 

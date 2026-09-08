@@ -103,7 +103,19 @@ describe("runBrowserSessionExecution", () => {
       return {
         answerText: "ok",
         answerMarkdown: "ok",
-        artifacts: [{ kind: "transcript" as const, path: "/tmp/transcript.md" }],
+        artifacts: [
+          { kind: "file" as const, path: "/tmp/report.md", sha256: "a".repeat(64) },
+          { kind: "transcript" as const, path: "/tmp/transcript.md" },
+        ],
+        savedFiles: [
+          {
+            kind: "file" as const,
+            path: "/tmp/report.md",
+            sha256: "a".repeat(64),
+            url: "https://chatgpt.com/backend-api/files/report",
+            filename: "report.md",
+          },
+        ],
         tookMs: 1000,
         answerTokens: 12,
         answerChars: 20,
@@ -140,7 +152,13 @@ describe("runBrowserSessionExecution", () => {
       totalTokens: 54,
     });
     expect(result.runtime).toMatchObject({ chromePid: undefined, conversationId: "foo" });
-    expect(result.artifacts).toEqual([{ kind: "transcript", path: "/tmp/transcript.md" }]);
+    expect(result.artifacts).toEqual([
+      { kind: "file", path: "/tmp/report.md", sha256: "a".repeat(64) },
+      { kind: "transcript", path: "/tmp/transcript.md" },
+    ]);
+    expect(result.savedFiles).toEqual([
+      expect.objectContaining({ path: "/tmp/report.md", sha256: "a".repeat(64) }),
+    ]);
     expect(persistRuntimeHint).toHaveBeenCalledWith(
       expect.objectContaining({ chromePort: 9999, chromeHost: "127.0.0.1", chromeTargetId: "t-1" }),
       expect.objectContaining({ resolvedLabel: "Pro", verified: true }),
@@ -584,6 +602,49 @@ describe("runBrowserSessionExecution", () => {
       },
     );
     expect(log.mock.calls.some((call) => String(call[0]).includes("ChatGPT thinking"))).toBe(true);
+  });
+
+  test("prints each approval wait and heartbeat without verbose mode", async () => {
+    const log = vi.fn();
+    await runBrowserSessionExecution(
+      {
+        runOptions: { ...baseRunOptions, verbose: false },
+        browserConfig: baseConfig,
+        cwd: "/repo",
+        log,
+      },
+      {
+        assemblePrompt: async () => ({
+          markdown: "prompt",
+          composerText: "prompt",
+          estimatedInputTokens: 5,
+          attachments: [],
+          inlineFileCount: 0,
+          tokenEstimateIncludesInlineFiles: false,
+          attachmentsPolicy: "auto",
+          attachmentMode: "inline",
+          fallback: null,
+        }),
+        executeBrowser: async ({ log: automationLog }) => {
+          automationLog?.(
+            "[browser] Waiting for Chrome remote debugging approval for 127.0.0.1:9222...",
+          );
+          automationLog?.(
+            "[browser] Still waiting for Chrome remote debugging approval for 127.0.0.1:9222 (15s elapsed). Click Allow in an open Chrome window.",
+          );
+          return {
+            answerText: "text",
+            answerMarkdown: "markdown",
+            tookMs: 1,
+            answerTokens: 1,
+            answerChars: 4,
+          };
+        },
+      },
+    );
+    expect(
+      log.mock.calls.filter((call) => String(call[0]).includes("remote debugging approval")),
+    ).toHaveLength(2);
   });
 
   test("prints browser follow-up progress logs even when not verbose", async () => {

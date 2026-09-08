@@ -111,6 +111,7 @@ export async function acquireBrowserTabLease(
     chromeHost?: string;
     chromePort?: number;
     staleMs?: number;
+    signal?: AbortSignal;
   },
   deps: BrowserTabLeaseDeps = {},
 ): Promise<BrowserTabLease> {
@@ -127,34 +128,40 @@ export async function acquireBrowserTabLease(
   let lastHeartbeatAt = 0;
 
   for (;;) {
-    const acquired = await withRegistryLock(profileDir, async () => {
-      const registry = await readRegistry(profileDir);
-      const active = await pruneStaleLeases(registry.leases, {
-        nowMs: now(),
-        staleMs,
-        isProcessAlive: deps.isProcessAlive ?? isProcessAlive,
-        readProcessStartTimeMs: deps.readProcessStartTimeMs ?? readProcessStartTimeMs,
-      });
-      if (active.length >= maxConcurrentTabs) {
-        if (active.length !== registry.leases.length) {
-          await writeRegistry(profileDir, { version: 1, leases: active });
+    options.signal?.throwIfAborted();
+    const acquired = await withRegistryLock(
+      profileDir,
+      async () => {
+        options.signal?.throwIfAborted();
+        const registry = await readRegistry(profileDir);
+        const active = await pruneStaleLeases(registry.leases, {
+          nowMs: now(),
+          staleMs,
+          isProcessAlive: deps.isProcessAlive ?? isProcessAlive,
+          readProcessStartTimeMs: deps.readProcessStartTimeMs ?? readProcessStartTimeMs,
+        });
+        if (active.length >= maxConcurrentTabs) {
+          if (active.length !== registry.leases.length) {
+            await writeRegistry(profileDir, { version: 1, leases: active });
+          }
+          return null;
         }
-        return null;
-      }
-      const timestamp = new Date(now()).toISOString();
-      const lease: BrowserTabLeaseRecord = {
-        id: leaseId,
-        pid,
-        ...(processStartedAtMs === null ? {} : { processStartedAtMs }),
-        sessionId: options.sessionId,
-        chromeHost: options.chromeHost,
-        chromePort: options.chromePort,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      await writeRegistry(profileDir, { version: 1, leases: [...active, lease] });
-      return lease;
-    });
+        const timestamp = new Date(now()).toISOString();
+        const lease: BrowserTabLeaseRecord = {
+          id: leaseId,
+          pid,
+          ...(processStartedAtMs === null ? {} : { processStartedAtMs }),
+          sessionId: options.sessionId,
+          chromeHost: options.chromeHost,
+          chromePort: options.chromePort,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        await writeRegistry(profileDir, { version: 1, leases: [...active, lease] });
+        return lease;
+      },
+      options.signal,
+    );
 
     if (acquired) {
       options.logger?.(
@@ -219,7 +226,7 @@ export async function acquireBrowserTabLease(
         `Timed out waiting for ChatGPT browser slot after ${Math.round(elapsed / 1000)}s (${maxConcurrentTabs} max).`,
       );
     }
-    await delay(timeoutMs > 0 ? Math.min(pollMs, timeoutMs - elapsed) : pollMs);
+    await delay(timeoutMs > 0 ? Math.min(pollMs, timeoutMs - elapsed) : pollMs, options.signal);
   }
 }
 
@@ -315,12 +322,17 @@ export async function hasOtherActiveBrowserTabLeases(
   });
 }
 
-async function withRegistryLock<T>(profileDir: string, callback: () => Promise<T>): Promise<T> {
+async function withRegistryLock<T>(
+  profileDir: string,
+  callback: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
   const lockDir = path.join(profileDir, REGISTRY_LOCK_DIRNAME);
   const lockId = randomUUID();
   const processStartedAtMs = await readProcessStartTimeMs(process.pid);
   const startedAt = Date.now();
   for (;;) {
+    signal?.throwIfAborted();
     try {
       // mkdir is exclusive on every platform; rename can replace a live empty
       // directory on POSIX (including locks held by older Oracle controllers).
@@ -347,7 +359,7 @@ async function withRegistryLock<T>(profileDir: string, callback: () => Promise<T
           `Timed out waiting for Oracle tab lease registry lock ${lockDir}; preserving the existing lock to avoid split-brain cleanup.`,
         );
       }
-      await delay(50);
+      await delay(50, signal);
       continue;
     }
     const acquiredIdentity = await readRegistryLockIdentity(lockDir);

@@ -50,13 +50,15 @@ export const MODEL_CONFIGS: Record<KnownModelName, ModelConfig> = {
     model: "gpt-6-astra",
     provider: "openai",
     tokenizer: countTokensGpt5 as TokenizerFn,
-    // Same base-rate window as GPT-5.6: prompts above 272K input tokens are billed at the long-context multiplier.
-    inputLimit: GPT_5_6_BASE_RATE_INPUT_LIMIT,
+    // Conservative base-rate budget, not Astra's maximum context window.
+    // https://developers.openai.com/api/docs/models/gpt-6-astra
+    inputLimit: 272_000,
     pricing: {
       inputPerToken: 10 / 1_000_000,
       outputPerToken: 50 / 1_000_000,
     },
     reasoning: { effort: "xhigh" },
+    searchToolType: "web_search",
   },
   "gpt-5.6": {
     model: "gpt-5.6",

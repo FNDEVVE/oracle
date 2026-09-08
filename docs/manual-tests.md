@@ -24,6 +24,10 @@ The disposable profile and fixtures live in a temporary, non-hidden directory un
 
 The attachment proof also holds composer upload progress active for longer than three seconds inside a non-editable attachment widget nested in a rich-text editor, verifies completion and send both refuse it without input, then clears it and verifies one successful send despite unrelated page progress. Readiness uses explicit loading/busy state and native/ARIA progress controls; filenames and status prose alone cannot establish an active transfer.
 
+### Browser artifact export
+
+For browser file export, run `pnpm build && node scripts/artifact-export-proof.mjs`. It uses the actual CLI and isolated Chrome with synthetic sandbox-download responses, checking answer-only defaults, opt-in binary exports, collision preservation, recorded hashes, and copy-failure warnings. This does not establish current signed-in ChatGPT download or authentication behavior.
+
 ### Signed-in attachment / Work-mode guard
 
 Before the signed-in smoke, run `pnpm build && node scripts/attachment-cli-proof.mjs` for the actual CLI against isolated local and remote Chrome fixtures. It checks per-file bytes, filename-less image evidence, upload progress, final focus/readiness, canonical conversation identity, Work refusal, missing exact send controls, and single submission. Optional `--baseline-cli <path>` demonstrates the older CLI sending after a project-context switch. These synthetic pages do not establish current signed-in ChatGPT behavior.
@@ -157,6 +161,10 @@ Debug note: when you have a live ChatGPT tab open under a DevTools port and need
 - Confirm log shows `Cookie sync failed (continuing with override)` and the run proceeds headless/logged-out.
 - Remember: the browser composer now pastes only the user prompt (plus any inline file blocks). If you see the default “You are Oracle…” text or other system-prefixed content in the ChatGPT composer, something regressed in `assembleBrowserPrompt` and you should stop and file a bug.
 - Heartbeats: Browser runs emit `--heartbeat` status while waiting. Long Thinking/Pro runs should show `[browser] ChatGPT thinking ...` or `[browser] Waiting for ChatGPT response ...`; the log must not include reasoning text from the side panel.
+
+### Service admission and cancellation
+
+For service admission and cancellation, run `pnpm build && node scripts/serve-queue-proof.mjs`. It drives the built service and CLI clients against real isolated Chrome with synthetic pages: default 409, host-cap clamping, FIFO waiting, 503 overflow, queued/active cancellation, and distinct host sessions. Additional compiled integration runs cover lease/profile-lock waits, borrowed targets, delayed CDP replies, Chrome acquisition, and temporary-launch cleanup. `--baseline-cli <path>` uses an older client for one queued completion. This does not prove signed-in ChatGPT behavior or backend generation cancellation.
 
 ## Post-Run Validation
 
